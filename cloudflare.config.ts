@@ -30,7 +30,9 @@ export default defineConfig({
       CUCKOO_API_KEY: bindings.secret(),
 
       // Vinext persistent cache
-      VINEXT_KV_CACHE: bindings.kv(),
+      VINEXT_KV_CACHE: bindings.kv({
+        id: "1a752e8ff53b48ca932b137db0007342"
+    }),
     },
   }),
 });
