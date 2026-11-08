@@ -20,6 +20,9 @@ export default defineConfig({
       ),
       CUCKOO_API_APP_NAME: bindings.secret(),
       CUCKOO_API_KEY: bindings.secret(),
+
+      // Vinext persistent cache
+      VINEXT_KV_CACHE: bindings.kv(),
     },
   }),
 });
