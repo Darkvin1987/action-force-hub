@@ -2,10 +2,16 @@
 import { NextRequest, NextResponse } from "next/server";
 import { createClient as createSupabaseClient } from "@supabase/supabase-js";
 import { createServerClient } from "@supabase/ssr";
+import { env } from "cloudflare:workers";
 
 export async function POST(request: NextRequest) {
   try {
-    const body = await request.json();
+    const rawBody: unknown = await request.json();
+
+    const body =
+      typeof rawBody === "object" && rawBody !== null
+        ? (rawBody as Record<string, unknown>)
+        : {};
 
     const memberCode =
       typeof body.memberCode === "string"
@@ -29,10 +35,16 @@ export async function POST(request: NextRequest) {
     const supabaseUrl = process.env.NEXT_PUBLIC_SUPABASE_URL;
     const publishableKey =
       process.env.NEXT_PUBLIC_SUPABASE_PUBLISHABLE_KEY;
-    const secretKey = process.env.SUPABASE_SECRET_KEY;
+    const secretKey =
+      env.SUPABASE_SECRET_KEY || process.env.SUPABASE_SECRET_KEY;
 
     if (!supabaseUrl || !publishableKey || !secretKey) {
       console.error("Staff login server configuration is missing.");
+      {/*console.error("Staff login configuration check:", {
+        hasSupabaseUrl: Boolean(supabaseUrl),
+        hasPublishableKey: Boolean(publishableKey),
+        hasSecretKey: Boolean(secretKey),
+      });*/}
 
       return NextResponse.json(
         { error: "Login service is not configured." },

@@ -141,7 +141,7 @@ export default function DashboardClient({
           }
         );
 
-        const result = await response.json();
+        const result = (await response.json()) as DashboardData;
 
         if (!response.ok || !result.success) {
           throw new Error(

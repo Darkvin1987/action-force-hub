@@ -33,7 +33,10 @@ export default function StaffAccountsForm() {
   async function loadStaff() {
     try {
       const response = await fetch("/api/staff-management");
-      const result = await response.json();
+      const result = (await response.json()) as {
+        staff?: Staff[];
+        error?: string;
+      };
 
       if (!response.ok) {
         setMessage(result.error ?? "Unable to load staff.");
@@ -81,7 +84,10 @@ export default function StaffAccountsForm() {
         }),
       });
 
-      const result = await response.json();
+      const result = (await response.json()) as CreatedAccount & {
+        message?: string;
+        error?: string;
+      };
 
       if (!response.ok) {
         setMessage(result.error ?? "Unable to create the account.");

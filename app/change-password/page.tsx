@@ -1,6 +1,7 @@
+
 import { redirect } from "next/navigation";
 import { getStaffProfile } from "@/lib/staff/get-staff-profile";
-import ChangePasswordForm from "./ChangePasswordForm";
+import ChangePasswordForm from "../(authenticated)/change-password/ChangePasswordForm";
 
 export default async function ChangePasswordPage() {
   const profile = await getStaffProfile();

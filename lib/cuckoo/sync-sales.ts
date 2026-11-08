@@ -1,6 +1,9 @@
 
 import type { SupabaseClient } from "@supabase/supabase-js";
-import { getCuckooSales } from "@/lib/cuckooAPI/sales";
+import {
+  getCuckooSales,
+  type CuckooSalesPage,
+} from "@/lib/cuckooAPI/sales";
 
 const PAGE_SIZE = 30;
 const PAGE_CONCURRENCY = 3;
@@ -43,7 +46,7 @@ export async function syncCuckooSales(
   // 1. Retrieve first API page.
   const firstPageStart = Date.now();
 
-  const firstPage = await getCuckooSales(
+  const firstPage: CuckooSalesPage = await getCuckooSales(
     memberCode,
     1,
     PAGE_SIZE
@@ -70,7 +73,7 @@ export async function syncCuckooSales(
 
   const remainingPagesStart = Date.now();
 
-  const remainingPages = await runWithConcurrency(
+  const remainingPages: CuckooSalesPage[] = await runWithConcurrency(
     pageNumbers,
     PAGE_CONCURRENCY,
     (pageNumber) =>

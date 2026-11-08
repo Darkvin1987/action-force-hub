@@ -10,6 +10,24 @@ const allowedOrganizations = [
   "INDEPENDENT_DISTRIBUTOR",
 ] as const;
 
+function isAllowedRole(
+  value: unknown
+): value is (typeof allowedRoles)[number] {
+  return (
+    typeof value === "string" &&
+    (allowedRoles as readonly string[]).includes(value)
+  );
+}
+
+function isAllowedOrganization(
+  value: unknown
+): value is (typeof allowedOrganizations)[number] {
+  return (
+    typeof value === "string" &&
+    (allowedOrganizations as readonly string[]).includes(value)
+  );
+}
+
 export async function GET() {
   const supabase = await createClient();
 
@@ -99,7 +117,13 @@ export async function POST(request: Request) {
       );
     }
 
-    const body = await request.json();
+    const rawBody: unknown = await request.json();
+    const body: Record<string, unknown> =
+      typeof rawBody === "object" &&
+      rawBody !== null &&
+      !Array.isArray(rawBody)
+        ? rawBody as Record<string, unknown>
+        : {};
 
     const memberCode =
       typeof body.member_code === "string"
@@ -124,8 +148,8 @@ export async function POST(request: Request) {
       !/^[A-Z0-9_-]{3,40}$/.test(memberCode) ||
       fullName.length < 2 ||
       fullName.length > 100 ||
-      !allowedRoles.includes(role) ||
-      !allowedOrganizations.includes(organizationType)
+      !isAllowedRole(role) ||
+      !isAllowedOrganization(organizationType)
     ) {
       return NextResponse.json(
         { error: "Invalid staff details." },

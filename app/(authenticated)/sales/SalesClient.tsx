@@ -144,7 +144,7 @@ export default function SalesClient({
           }
         );
 
-        const result = await response.json();
+        const result = (await response.json()) as SalesApiResponse;
 
         if (!response.ok || !result.success) {
           throw new Error(
@@ -198,7 +198,7 @@ export default function SalesClient({
             }
           );
 
-          const syncResult = await syncResponse.json();
+          const syncResult = (await syncResponse.json()) as { success: boolean; error?: string };
 
           if (!syncResponse.ok || !syncResult.success) {
             throw new Error(
@@ -224,7 +224,7 @@ export default function SalesClient({
             }
           );
 
-          const refreshedResult = await refreshResponse.json();
+          const refreshedResult = (await refreshResponse.json()) as SalesApiResponse;
 
           if (!refreshResponse.ok || !refreshedResult.success) {
             throw new Error(
@@ -288,7 +288,12 @@ export default function SalesClient({
         cache: "no-store",
       });
 
-      const result = await response.json();
+      const result = (await response.json()) as {
+        success: boolean;
+        error?: string;
+        failedCount: number;
+        inProgressCount: number;
+      };
 
       if (!response.ok) {
         throw new Error(
@@ -305,7 +310,7 @@ export default function SalesClient({
         }
       );
 
-      const refreshedResult = await refreshResponse.json();
+      const refreshedResult = (await refreshResponse.json()) as SalesApiResponse;
 
       if (!refreshResponse.ok || !refreshedResult.success) {
         throw new Error(

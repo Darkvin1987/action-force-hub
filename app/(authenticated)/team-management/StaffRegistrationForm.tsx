@@ -32,8 +32,11 @@ export default function StaffRegistrationForm() {
 
   async function loadStaff() {
     const response = await fetch("/api/staff-management");
-    const result = await response.json();
-
+    const result = (await response.json()) as {
+      staff?: Staff[];
+      error?: string;
+    };
+    
     if (response.ok) {
       setStaff(result.staff ?? []);
     } else {
@@ -107,8 +110,11 @@ export default function StaffRegistrationForm() {
         }),
       });
 
-      const result = await response.json();
-
+      const result = (await response.json()) as {
+        message?: string;
+        error?: string;
+      };
+      
       if (!response.ok) {
         setMessage(result.error ?? "Unable to create staff profile.");
         return;
