@@ -35,16 +35,13 @@ export async function POST(request: NextRequest) {
     const supabaseUrl = process.env.NEXT_PUBLIC_SUPABASE_URL;
     const publishableKey =
       process.env.NEXT_PUBLIC_SUPABASE_PUBLISHABLE_KEY;
+
     const secretKey =
       env.SUPABASE_SECRET_KEY || process.env.SUPABASE_SECRET_KEY;
 
+    // Server-only client: look up the Member Code securely.
     if (!supabaseUrl || !publishableKey || !secretKey) {
       console.error("Staff login server configuration is missing.");
-      {/*console.error("Staff login configuration check:", {
-        hasSupabaseUrl: Boolean(supabaseUrl),
-        hasPublishableKey: Boolean(publishableKey),
-        hasSecretKey: Boolean(secretKey),
-      });*/}
 
       return NextResponse.json(
         { error: "Login service is not configured." },
