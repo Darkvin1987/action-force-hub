@@ -1,5 +1,7 @@
+
 import { createServerClient } from "@supabase/ssr";
 import { NextResponse, type NextRequest } from "next/server";
+import { env } from "cloudflare:workers";
 
 export async function proxy(request: NextRequest) {
   const { pathname } = request.nextUrl;
@@ -9,11 +11,31 @@ export async function proxy(request: NextRequest) {
     return NextResponse.next({ request });
   }
 
+  const supabaseUrl =
+    env.NEXT_PUBLIC_SUPABASE_URL ||
+    process.env.NEXT_PUBLIC_SUPABASE_URL;
+
+  const publishableKey =
+    env.NEXT_PUBLIC_SUPABASE_PUBLISHABLE_KEY ||
+    process.env.NEXT_PUBLIC_SUPABASE_PUBLISHABLE_KEY;
+
+  if (!supabaseUrl || !publishableKey) {
+    console.error("Proxy Supabase configuration is missing:", {
+      hasSupabaseUrl: Boolean(supabaseUrl),
+      hasPublishableKey: Boolean(publishableKey),
+    });
+
+    return NextResponse.json(
+      { error: "Authentication service is not configured." },
+      { status: 500 }
+    );
+  }
+
   let response = NextResponse.next({ request });
 
   const supabase = createServerClient(
-    process.env.NEXT_PUBLIC_SUPABASE_URL!,
-    process.env.NEXT_PUBLIC_SUPABASE_PUBLISHABLE_KEY!,
+    supabaseUrl,
+    publishableKey,
     {
       cookies: {
         getAll() {
@@ -50,6 +72,7 @@ export async function proxy(request: NextRequest) {
     url.searchParams.set("next", pathname);
 
     const redirectResponse = NextResponse.redirect(url);
+
     response.cookies.getAll().forEach((cookie) => {
       redirectResponse.cookies.set(cookie);
     });
@@ -100,6 +123,7 @@ export async function proxy(request: NextRequest) {
     url.search = "";
 
     const redirectResponse = NextResponse.redirect(url);
+
     response.cookies.getAll().forEach((cookie) => {
       redirectResponse.cookies.set(cookie);
     });
@@ -114,6 +138,7 @@ export async function proxy(request: NextRequest) {
     url.search = "";
 
     const redirectResponse = NextResponse.redirect(url);
+
     response.cookies.getAll().forEach((cookie) => {
       redirectResponse.cookies.set(cookie);
     });

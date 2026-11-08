@@ -22,6 +22,8 @@ export default defineConfig({
 
     env: {
       ASSETS: bindings.assets(),
+      NEXT_PUBLIC_SUPABASE_URL: bindings.text("https://wztjmpntagnfnwhpdamu.supabase.co"),
+      NEXT_PUBLIC_SUPABASE_PUBLISHABLE_KEY: bindings.text("sb_publishable_UZl5sTNh2ia2ntBk5lOH6A_VEg-E4ep"),
       SUPABASE_SECRET_KEY: bindings.secret(),
       CUCKOO_API_BASE_URL: bindings.text(
         "https://mapi.cuckoo.com.my/SalesAPI"

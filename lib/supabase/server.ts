@@ -1,19 +1,26 @@
 
 import { createServerClient } from "@supabase/ssr";
 import { cookies } from "next/headers";
+import { env } from "cloudflare:workers";
 
 export async function createSupabaseServerClient() {
-  const url = process.env.NEXT_PUBLIC_SUPABASE_URL;
+  const url =
+    env.NEXT_PUBLIC_SUPABASE_URL ||
+    process.env.NEXT_PUBLIC_SUPABASE_URL;
 
   const key =
+    env.NEXT_PUBLIC_SUPABASE_PUBLISHABLE_KEY ||
     process.env.NEXT_PUBLIC_SUPABASE_PUBLISHABLE_KEY ||
     process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY ||
     process.env.SUPABASE_ANON_KEY;
 
   if (!url || !key) {
-    throw new Error(
-      "Missing Supabase configuration. Check NEXT_PUBLIC_SUPABASE_URL and NEXT_PUBLIC_SUPABASE_PUBLISHABLE_KEY in .env.local."
-    );
+    console.error("Supabase server configuration is missing:", {
+      hasSupabaseUrl: Boolean(url),
+      hasPublishableKey: Boolean(key),
+    });
+
+    throw new Error("Missing Supabase server configuration.");
   }
 
   const cookieStore = await cookies();
