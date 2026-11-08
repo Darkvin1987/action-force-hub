@@ -5,8 +5,9 @@ import { createAdminClient } from "@/lib/supabase/admin";
 import { getStaffProfile } from "@/lib/staff/get-staff-profile";
 
 import {
+  getAuthorisedTeamMembers,
   syncMemberIfStale,
-  syncAuthorisedTeamSales,
+  type StaffProfile,
 } from "@/lib/cuckoo/sync-team-sales";
 
 export async function POST(request: Request) {
@@ -16,26 +17,32 @@ export async function POST(request: Request) {
 
     if (!staff) {
       return NextResponse.json(
-        { success: false, error: "Unauthorised access." },
+        {
+          success: false,
+          error: "Unauthorised access.",
+        },
         { status: 401 }
       );
     }
 
-    // 2. Read the optional force flag.
+    // 2. Read the request body safely.
     const rawBody: unknown = await request.json().catch(() => ({}));
 
-    const force =
+    const body =
       typeof rawBody === "object" &&
       rawBody !== null &&
-      !Array.isArray(rawBody) &&
-      "force" in rawBody &&
-      rawBody.force === true;
+      !Array.isArray(rawBody)
+        ? (rawBody as Record<string, unknown>)
+        : {};
+
+    const action = body.action;
+    const force = body.force === true;
 
     // 3. Create the server-side database client.
     const admin = createAdminClient();
 
-    // 4. Prepare the authenticated staff profile.
-    const manager = {
+    // 4. Prepare the authenticated manager profile.
+    const manager: StaffProfile = {
       id: staff.id,
       member_code: staff.member_code,
       role: staff.role,
@@ -43,43 +50,94 @@ export async function POST(request: Request) {
       created_at: null,
     };
 
-    // 5. Synchronise personal sales and authorised team sales.
-    const [personalResult, teamResult] = await Promise.all([
-      syncMemberIfStale(admin, staff.member_code, force),
-      syncAuthorisedTeamSales(admin, manager, force),
-    ]);
+    // 5. Retrieve the authorised team.
+    const teamInfo = await getAuthorisedTeamMembers(
+      admin,
+      manager
+    );
 
-    // 6. Combine all sync results.
-    const results = [
-      personalResult,
-      ...teamResult.results,
-    ];
+    // ACTION A: Return the authorised member list.
+    if (action === "list") {
+      return NextResponse.json(
+        {
+          success: true,
+          personalMemberCode: staff.member_code,
+          teamMemberCount: teamInfo.teamMemberCount,
+          newRecruitsThisMonth:
+            teamInfo.newRecruitsThisMonth,
+          teamMemberCodes: teamInfo.teamMemberCodes,
+        },
+        {
+          headers: {
+            "Cache-Control": "no-store",
+          },
+        }
+      );
+    }
 
-    const failedCount = results.filter(
-      (item) => item.status === "FAILED"
-    ).length;
+    // ACTION B: Synchronise one member only.
+    if (action === "sync") {
+      const memberCode =
+        typeof body.memberCode === "string"
+          ? body.memberCode.trim().toUpperCase()
+          : "";
 
-    const inProgressCount = results.filter(
-      (item) => item.status === "IN_PROGRESS"
-    ).length;
+      if (!memberCode) {
+        return NextResponse.json(
+          {
+            success: false,
+            error: "Member Code is required.",
+          },
+          { status: 400 }
+        );
+      }
 
-    // 7. Return the response expected by SalesClient.
+      // The user may synchronise their own sales.
+      const isOwnMember =
+        staff.member_code.toUpperCase() === memberCode;
+
+      // Or synchronise a member within their authorised team.
+      const isAuthorisedTeamMember =
+        teamInfo.team.some(
+          (member) =>
+            member.member_code.toUpperCase() === memberCode
+        );
+
+      if (!isOwnMember && !isAuthorisedTeamMember) {
+        return NextResponse.json(
+          {
+            success: false,
+            error: "You are not authorised to synchronise this member.",
+          },
+          { status: 403 }
+        );
+      }
+
+      const result = await syncMemberIfStale(
+        admin,
+        memberCode,
+        force
+      );
+
+      return NextResponse.json(
+        {
+          success: true,
+          result,
+        },
+        {
+          headers: {
+            "Cache-Control": "no-store",
+          },
+        }
+      );
+    }
+
     return NextResponse.json(
       {
-        success: true,
-        message: "Sales synchronisation process completed.",
-        force,
-        teamMemberCount: teamResult.teamMemberCount,
-        newRecruitsThisMonth: teamResult.newRecruitsThisMonth,
-        failedCount,
-        inProgressCount,
-        results,
+        success: false,
+        error: "Invalid synchronisation action.",
       },
-      {
-        headers: {
-          "Cache-Control": "no-store",
-        },
-      }
+      { status: 400 }
     );
   } catch (error) {
     console.error("Sales synchronisation API error:", error);

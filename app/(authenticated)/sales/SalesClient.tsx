@@ -1,3 +1,4 @@
+
 "use client";
 
 import { useEffect, useRef, useState } from "react";
@@ -58,6 +59,34 @@ type StatusCategory =
   | "pendingDocumentSubmission"
   | "pendingPayment";
 
+type SyncListResponse = {
+  success: boolean;
+  error?: string;
+  personalMemberCode: string;
+  teamMemberCodes: string[];
+};
+
+type SyncMemberResponse = {
+  success: boolean;
+  error?: string;
+  result: SyncMemberResult;
+};
+
+type SyncMemberResult = {
+  memberCode: string;
+  status: "SUCCESS" | "FAILED" | "SKIPPED" | "IN_PROGRESS";
+  synced?: number;
+  message?: string;
+};
+
+type SyncSummary = {
+  totalMembers: number;
+  failedCount: number;
+  inProgressCount: number;
+  skippedCount: number;
+  results: SyncMemberResult[];
+};
+
 const months = [
   "January",
   "February",
@@ -79,6 +108,7 @@ function formatUnits(value: number) {
 
 function getProgress(actual: number, target: number) {
   if (target <= 0) return 0;
+
   return Math.min((actual / target) * 100, 100);
 }
 
@@ -92,6 +122,131 @@ function formatPercentage(actual: number, target: number) {
   return `${((actual / target) * 100)
     .toFixed(1)
     .replace(/\.0$/, "")}% achieved`;
+}
+
+/**
+ * Synchronise personal sales and authorised team members.
+ *
+ * Each member is processed through a separate HTTP request.
+ * Requests are deliberately sequential to avoid creating
+ * excessive subrequests in a single Cloudflare invocation.
+ */
+async function runSalesSync(force = false): Promise<SyncSummary> {
+  // STEP 1: Retrieve the authorised team.
+  const listResponse = await fetch("/api/cuckoo/sales/sync", {
+    method: "POST",
+    headers: {
+      "Content-Type": "application/json",
+    },
+    body: JSON.stringify({
+      action: "list",
+    }),
+    cache: "no-store",
+  });
+
+  const listResult = (await listResponse.json()) as SyncListResponse;
+
+  if (!listResponse.ok || !listResult.success) {
+    throw new Error(
+      listResult.error || "Unable to retrieve authorised team."
+    );
+  }
+
+  // STEP 2: Combine personal and team member codes.
+  // Remove duplicates to avoid syncing the same member twice.
+  const memberCodes = Array.from(
+    new Set<string>(
+      [
+        listResult.personalMemberCode,
+        ...(listResult.teamMemberCodes ?? []),
+      ]
+        .filter(
+          (code): code is string =>
+            typeof code === "string" && code.trim().length > 0
+        )
+        .map((code) => code.trim().toUpperCase())
+    )
+  );
+
+  const results: SyncMemberResult[] = [];
+
+  // STEP 3: Process one member at a time.
+  for (const memberCode of memberCodes) {
+    try {
+      const response = await fetch("/api/cuckoo/sales/sync", {
+        method: "POST",
+        headers: {
+          "Content-Type": "application/json",
+        },
+        body: JSON.stringify({
+          action: "sync",
+          memberCode,
+          force,
+        }),
+        cache: "no-store",
+      });
+
+      const result = (await response.json()) as SyncMemberResponse;
+
+      if (!response.ok || !result.success) {
+        results.push({
+          memberCode,
+          status: "FAILED",
+          message:
+            result.error || "Member synchronisation failed.",
+        });
+
+        console.error(
+          `[SALES SYNC] ${memberCode} failed:`,
+          result.error
+        );
+
+        continue;
+      }
+
+      const memberResult =
+        result.result as SyncMemberResult;
+
+      results.push(memberResult);
+
+      console.log(
+        `[SALES SYNC] ${memberCode}: ${memberResult.status}`
+      );
+    } catch (error) {
+      results.push({
+        memberCode,
+        status: "FAILED",
+        message:
+          error instanceof Error
+            ? error.message
+            : "Unknown synchronisation error.",
+      });
+
+      console.error(
+        `[SALES SYNC] ${memberCode} request failed:`,
+        error
+      );
+    }
+  }
+
+  // STEP 4: Return the overall synchronisation summary.
+  return {
+    totalMembers: memberCodes.length,
+
+    failedCount: results.filter(
+      (item) => item.status === "FAILED"
+    ).length,
+
+    inProgressCount: results.filter(
+      (item) => item.status === "IN_PROGRESS"
+    ).length,
+
+    skippedCount: results.filter(
+      (item) => item.status === "SKIPPED"
+    ).length,
+
+    results,
+  };
 }
 
 export default function SalesClient({
@@ -120,10 +275,12 @@ export default function SalesClient({
     (_, index) => 2025 + index
   );
 
-  
-  // Prevent duplicate sync requests for the same month
+  // Prevent duplicate automatic sync requests for the same month
   // during React development Strict Mode.
   const syncStartedFor = useRef(new Set<string>());
+
+  // Prevent automatic and manual synchronisation from overlapping.
+  const syncInProgress = useRef(false);
 
   // Load saved Sales Results first, then synchronise separately.
   useEffect(() => {
@@ -144,7 +301,8 @@ export default function SalesClient({
           }
         );
 
-        const result = (await response.json()) as SalesApiResponse;
+        const result =
+          (await response.json()) as SalesApiResponse;
 
         if (!response.ok || !result.success) {
           throw new Error(
@@ -152,7 +310,7 @@ export default function SalesClient({
           );
         }
 
-        // Display the saved figures without waiting for CUCKOO sync.
+        // Display saved figures without waiting for CUCKOO sync.
         setSalesData(result);
         setLoading(false);
 
@@ -175,39 +333,35 @@ export default function SalesClient({
           return;
         }
 
-        const syncKey = `${year}-${String(month).padStart(2, "0")}`;
+        const syncKey =
+          `${year}-${String(month).padStart(2, "0")}`;
 
-        if (syncStartedFor.current.has(syncKey)) {
+        if (
+          syncStartedFor.current.has(syncKey) ||
+          syncInProgress.current
+        ) {
           return;
         }
 
         syncStartedFor.current.add(syncKey);
+        syncInProgress.current = true;
 
         console.log(
-          "[SALES DASHBOARD] Starting separate sales synchronisation."
+          "[SALES DASHBOARD] Starting sequential sales synchronisation."
         );
 
         try {
-          // This request can take longer, but the dashboard is
-          // already displaying the saved figures.
-          const syncResponse = await fetch(
-            "/api/cuckoo/sales/sync",
-            {
-              method: "POST",
-              cache: "no-store",
-            }
-          );
-
-          const syncResult = (await syncResponse.json()) as { success: boolean; error?: string };
-
-          if (!syncResponse.ok || !syncResult.success) {
-            throw new Error(
-              syncResult.error || "Sales synchronisation failed."
-            );
-          }
+          // Synchronise personal and team members separately.
+          const syncResult = await runSalesSync(false);
 
           console.log(
-            "[SALES DASHBOARD] Synchronisation completed."
+            "[SALES DASHBOARD] Synchronisation completed.",
+            {
+              totalMembers: syncResult.totalMembers,
+              failedCount: syncResult.failedCount,
+              inProgressCount: syncResult.inProgressCount,
+              skippedCount: syncResult.skippedCount,
+            }
           );
 
           // STEP 3: Refresh dashboard figures after sync.
@@ -224,9 +378,13 @@ export default function SalesClient({
             }
           );
 
-          const refreshedResult = (await refreshResponse.json()) as SalesApiResponse;
+          const refreshedResult =
+            (await refreshResponse.json()) as SalesApiResponse;
 
-          if (!refreshResponse.ok || !refreshedResult.success) {
+          if (
+            !refreshResponse.ok ||
+            !refreshedResult.success
+          ) {
             throw new Error(
               refreshedResult.error ||
                 "Unable to refresh sales results."
@@ -235,8 +393,17 @@ export default function SalesClient({
 
           if (!controller.signal.aborted) {
             setSalesData(refreshedResult);
-          }
 
+            if (syncResult.failedCount > 0) {
+              setSyncMessage(
+                `Automatic sync completed with ${syncResult.failedCount} failed member sync(s).`
+              );
+            } else if (syncResult.inProgressCount > 0) {
+              setSyncMessage(
+                "Some members are already synchronising."
+              );
+            }
+          }
         } catch (syncError) {
           syncStartedFor.current.delete(syncKey);
 
@@ -244,8 +411,9 @@ export default function SalesClient({
             "[SALES DASHBOARD] Background sync error:",
             syncError
           );
+        } finally {
+          syncInProgress.current = false;
         }
-
       } catch (err) {
         if (err instanceof Error && err.name === "AbortError") {
           return;
@@ -258,7 +426,6 @@ export default function SalesClient({
             ? err.message
             : "Unable to load sales results."
         );
-
       } finally {
         if (!controller.signal.aborted) {
           setLoading(false);
@@ -271,37 +438,22 @@ export default function SalesClient({
     return () => controller.abort();
   }, [month, year]);
 
+  /**
+   * Manual refresh.
+   * Force synchronisation is applied to each member individually.
+   */
   async function handleManualRefresh() {
-    if (syncing || loading) return;
+    if (syncing || loading || syncInProgress.current) return;
 
     setSyncing(true);
+    syncInProgress.current = true;
     setSyncMessage("");
     setError("");
 
     try {
-      const response = await fetch("/api/cuckoo/sales/sync", {
-        method: "POST",
-        headers: {
-          "Content-Type": "application/json",
-        },
-        body: JSON.stringify({ force: true }),
-        cache: "no-store",
-      });
+      const result = await runSalesSync(true);
 
-      const result = (await response.json()) as {
-        success: boolean;
-        error?: string;
-        failedCount: number;
-        inProgressCount: number;
-      };
-
-      if (!response.ok) {
-        throw new Error(
-          result.error || "Unable to refresh sales."
-        );
-      }
-
-      // Reload the dashboard figures from Supabase.
+      // Reload dashboard figures from Supabase.
       const refreshResponse = await fetch(
         `/api/cuckoo/sales?month=${month}&year=${year}`,
         {
@@ -310,11 +462,16 @@ export default function SalesClient({
         }
       );
 
-      const refreshedResult = (await refreshResponse.json()) as SalesApiResponse;
+      const refreshedResult =
+        (await refreshResponse.json()) as SalesApiResponse;
 
-      if (!refreshResponse.ok || !refreshedResult.success) {
+      if (
+        !refreshResponse.ok ||
+        !refreshedResult.success
+      ) {
         throw new Error(
-          refreshedResult.error || "Unable to reload sales figures."
+          refreshedResult.error ||
+            "Unable to reload sales figures."
         );
       }
 
@@ -333,6 +490,13 @@ export default function SalesClient({
           "Sales figures successfully refreshed from CUCKOO."
         );
       }
+
+      console.log("[SALES DASHBOARD] Manual refresh summary:", {
+        totalMembers: result.totalMembers,
+        failedCount: result.failedCount,
+        inProgressCount: result.inProgressCount,
+        skippedCount: result.skippedCount,
+      });
     } catch (err) {
       console.error("Manual sales refresh error:", err);
 
@@ -342,13 +506,16 @@ export default function SalesClient({
           : "Unable to refresh sales."
       );
     } finally {
+      syncInProgress.current = false;
       setSyncing(false);
     }
   }
 
   // Navigate to CRM with the selected Sales Status.
   function openStatusDetails(category: StatusCategory) {
-    router.push(`/crm?status=${encodeURIComponent(category)}`);
+    router.push(
+      `/crm?status=${encodeURIComponent(category)}`
+    );
   }
 
   const personalSales = salesData?.personalSales;
@@ -492,10 +659,6 @@ export default function SalesClient({
           </label>
         </section>
 
-        {/*<div className="sales-period-label">
-          Showing results for {periodLabel}
-        </div>*/}
-
         <div
           style={{
             display: "flex",
@@ -506,49 +669,50 @@ export default function SalesClient({
             marginBottom: 16,
           }}
         >
-        <div className="sales-period-label">
-          Showing results for {periodLabel}
+          <div className="sales-period-label">
+            Showing results for {periodLabel}
+          </div>
+
+          <button
+            type="button"
+            onClick={handleManualRefresh}
+            disabled={syncing || loading}
+            style={{
+              padding: "10px 16px",
+              background: syncing ? "#7890b5" : "#234B87",
+              color: "#ffffff",
+              border: "none",
+              borderRadius: 8,
+              fontWeight: 600,
+              cursor:
+                syncing || loading ? "not-allowed" : "pointer",
+              opacity: syncing || loading ? 0.75 : 1,
+            }}
+          >
+            {syncing ? "Refreshing Sales..." : "↻ Refresh Sales"}
+          </button>
         </div>
 
-        <button
-          type="button"
-          onClick={handleManualRefresh}
-          disabled={syncing || loading}
-          style={{
-            padding: "10px 16px",
-            background: syncing ? "#7890b5" : "#234B87",
-            color: "#ffffff",
-            border: "none",
-            borderRadius: 8,
-            fontWeight: 600,
-            cursor: syncing || loading ? "not-allowed" : "pointer",
-            opacity: syncing || loading ? 0.75 : 1,
-          }}
+        {syncMessage && (
+          <p
+            role="status"
+            aria-live="polite"
+            style={{
+              margin: "0 0 16px",
+              padding: 12,
+              borderRadius: 8,
+              background: syncMessage.includes("successfully")
+                ? "#e8f5e9"
+                : "#fff4e5",
+              color: syncMessage.includes("successfully")
+                ? "#237a38"
+                : "#8a5700",
+              fontSize: 13,
+            }}
           >
-          {syncing ? "Refreshing Sales..." : "↻ Refresh Sales"}
-        </button>
-    </div>
-
-    {syncMessage && (
-      <p
-        role="status"
-        aria-live="polite"
-        style={{
-          margin: "0 0 16px",
-          padding: 12,
-          borderRadius: 8,
-          background: syncMessage.includes("successfully")
-            ? "#e8f5e9"
-            : "#fff4e5",
-          color: syncMessage.includes("successfully")
-            ? "#237a38"
-            : "#8a5700",
-          fontSize: 13,
-        }}
-      >
-        {syncMessage}
-      </p>
-    )}
+            {syncMessage}
+          </p>
+        )}
 
         {error && (
           <p className="sales-error" role="alert">

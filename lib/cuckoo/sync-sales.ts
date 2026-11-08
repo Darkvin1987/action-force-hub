@@ -6,7 +6,7 @@ import {
 } from "@/lib/cuckooAPI/sales";
 
 const PAGE_SIZE = 30;
-const PAGE_CONCURRENCY = 3;
+const PAGE_CONCURRENCY = 1;
 const UPSERT_BATCH_SIZE = 500;
 
 async function runWithConcurrency<T, R>(
@@ -43,7 +43,7 @@ export async function syncCuckooSales(
 ) {
   const totalStart = Date.now();
 
-  // 1. Retrieve first API page.
+  // 1. Retrieve the first API page.
   const firstPageStart = Date.now();
 
   const firstPage: CuckooSalesPage = await getCuckooSales(
@@ -56,16 +56,13 @@ export async function syncCuckooSales(
     `[SYNC TIMING] ${memberCode} - First API Page: ${Date.now() - firstPageStart}ms`
   );
 
-  const totalPages = Math.max(
-    firstPage.totalPages ?? 1,
-    1
-  );
+  const totalPages = Math.max(firstPage.totalPages ?? 1, 1);
 
   console.log(
     `[SYNC INFO] ${memberCode} - Total Pages: ${totalPages}`
   );
 
-  // 2. Retrieve remaining pages concurrently.
+  // 2. Retrieve remaining pages sequentially.
   const pageNumbers = Array.from(
     { length: totalPages - 1 },
     (_, index) => index + 2
@@ -77,11 +74,7 @@ export async function syncCuckooSales(
     pageNumbers,
     PAGE_CONCURRENCY,
     (pageNumber) =>
-      getCuckooSales(
-        memberCode,
-        pageNumber,
-        PAGE_SIZE
-      )
+      getCuckooSales(memberCode, pageNumber, PAGE_SIZE)
   );
 
   console.log(
@@ -173,7 +166,7 @@ export async function syncCuckooSales(
     };
   }
 
-  // 4. Save records in batches.
+  // 4. Save records in database batches.
   let synced = 0;
 
   const upsertStart = Date.now();
@@ -183,11 +176,7 @@ export async function syncCuckooSales(
     start < rows.length;
     start += UPSERT_BATCH_SIZE
   ) {
-    const batch = rows.slice(
-      start,
-      start + UPSERT_BATCH_SIZE
-    );
-
+    const batch = rows.slice(start, start + UPSERT_BATCH_SIZE);
     const batchStart = Date.now();
 
     const { error } = await supabase
