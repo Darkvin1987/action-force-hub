@@ -7,11 +7,19 @@ export default defineConfig({
     entrypoint: "vinext/server/fetch-handler",
     compatibilityDate: "2026-11-08",
     compatibilityFlags: ["nodejs_compat"],
+
+    // Enable the temporary workers.dev address.
+    workersDev: true,
+
+    // Keep version preview URLs disabled.
+    previewUrls: false,
+
     assets: {
       htmlHandling: "none",
       notFoundHandling: "none",
       runWorkerFirst: ["/*", "!/_next/static/*", "!/*/_next/static/*"],
     },
+
     env: {
       ASSETS: bindings.assets(),
       SUPABASE_SECRET_KEY: bindings.secret(),
