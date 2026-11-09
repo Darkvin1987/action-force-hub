@@ -1,7 +1,8 @@
 
+import { cache } from "react";
 import { createClient } from "@/lib/supabase/server";
 
-export async function getStaffProfile() {
+export const getStaffProfile = cache(async function getStaffProfile() {
   const supabase = await createClient();
 
   const {
@@ -30,4 +31,4 @@ export async function getStaffProfile() {
   }
 
   return profile;
-}
+});

@@ -6,8 +6,12 @@ import { env } from "cloudflare:workers";
 export async function proxy(request: NextRequest) {
   const { pathname } = request.nextUrl;
 
-  // Allow login page and login API without an existing session.
-  if (pathname === "/login" || pathname === "/api/staff-login") {
+  // These routes handle their own authentication.
+  if (
+    pathname === "/login" ||
+    pathname === "/api/staff-login" ||
+    pathname === "/api/change-password"
+  ) {
     return NextResponse.next({ request });
   }
 

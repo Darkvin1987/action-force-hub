@@ -1,7 +1,7 @@
 
 "use client";
 
-import { useEffect, useRef, useState } from "react";
+import { useEffect, useState } from "react";
 import { useRouter } from "next/navigation";
 
 import AppFooter from "@/components/AppFooter";
@@ -59,34 +59,6 @@ type StatusCategory =
   | "pendingDocumentSubmission"
   | "pendingPayment";
 
-type SyncListResponse = {
-  success: boolean;
-  error?: string;
-  personalMemberCode: string;
-  teamMemberCodes: string[];
-};
-
-type SyncMemberResponse = {
-  success: boolean;
-  error?: string;
-  result: SyncMemberResult;
-};
-
-type SyncMemberResult = {
-  memberCode: string;
-  status: "SUCCESS" | "FAILED" | "SKIPPED" | "IN_PROGRESS";
-  synced?: number;
-  message?: string;
-};
-
-type SyncSummary = {
-  totalMembers: number;
-  failedCount: number;
-  inProgressCount: number;
-  skippedCount: number;
-  results: SyncMemberResult[];
-};
-
 const months = [
   "January",
   "February",
@@ -124,131 +96,6 @@ function formatPercentage(actual: number, target: number) {
     .replace(/\.0$/, "")}% achieved`;
 }
 
-/**
- * Synchronise personal sales and authorised team members.
- *
- * Each member is processed through a separate HTTP request.
- * Requests are deliberately sequential to avoid creating
- * excessive subrequests in a single Cloudflare invocation.
- */
-async function runSalesSync(force = false): Promise<SyncSummary> {
-  // STEP 1: Retrieve the authorised team.
-  const listResponse = await fetch("/api/cuckoo/sales/sync", {
-    method: "POST",
-    headers: {
-      "Content-Type": "application/json",
-    },
-    body: JSON.stringify({
-      action: "list",
-    }),
-    cache: "no-store",
-  });
-
-  const listResult = (await listResponse.json()) as SyncListResponse;
-
-  if (!listResponse.ok || !listResult.success) {
-    throw new Error(
-      listResult.error || "Unable to retrieve authorised team."
-    );
-  }
-
-  // STEP 2: Combine personal and team member codes.
-  // Remove duplicates to avoid syncing the same member twice.
-  const memberCodes = Array.from(
-    new Set<string>(
-      [
-        listResult.personalMemberCode,
-        ...(listResult.teamMemberCodes ?? []),
-      ]
-        .filter(
-          (code): code is string =>
-            typeof code === "string" && code.trim().length > 0
-        )
-        .map((code) => code.trim().toUpperCase())
-    )
-  );
-
-  const results: SyncMemberResult[] = [];
-
-  // STEP 3: Process one member at a time.
-  for (const memberCode of memberCodes) {
-    try {
-      const response = await fetch("/api/cuckoo/sales/sync", {
-        method: "POST",
-        headers: {
-          "Content-Type": "application/json",
-        },
-        body: JSON.stringify({
-          action: "sync",
-          memberCode,
-          force,
-        }),
-        cache: "no-store",
-      });
-
-      const result = (await response.json()) as SyncMemberResponse;
-
-      if (!response.ok || !result.success) {
-        results.push({
-          memberCode,
-          status: "FAILED",
-          message:
-            result.error || "Member synchronisation failed.",
-        });
-
-        console.error(
-          `[SALES SYNC] ${memberCode} failed:`,
-          result.error
-        );
-
-        continue;
-      }
-
-      const memberResult =
-        result.result as SyncMemberResult;
-
-      results.push(memberResult);
-
-      console.log(
-        `[SALES SYNC] ${memberCode}: ${memberResult.status}`
-      );
-    } catch (error) {
-      results.push({
-        memberCode,
-        status: "FAILED",
-        message:
-          error instanceof Error
-            ? error.message
-            : "Unknown synchronisation error.",
-      });
-
-      console.error(
-        `[SALES SYNC] ${memberCode} request failed:`,
-        error
-      );
-    }
-  }
-
-  // STEP 4: Return the overall synchronisation summary.
-  return {
-    totalMembers: memberCodes.length,
-
-    failedCount: results.filter(
-      (item) => item.status === "FAILED"
-    ).length,
-
-    inProgressCount: results.filter(
-      (item) => item.status === "IN_PROGRESS"
-    ).length,
-
-    skippedCount: results.filter(
-      (item) => item.status === "SKIPPED"
-    ).length,
-
-    results,
-  };
-}
-
 export default function SalesClient({
   initialMonth,
   initialYear,
@@ -265,24 +112,16 @@ export default function SalesClient({
     useState<SalesApiResponse | null>(null);
 
   const [loading, setLoading] = useState(true);
+  const [refreshing, setRefreshing] = useState(false);
   const [error, setError] = useState("");
-
-  const [syncing, setSyncing] = useState(false);
-  const [syncMessage, setSyncMessage] = useState("");
+  const [refreshMessage, setRefreshMessage] = useState("");
 
   const years = Array.from(
     { length: initialYear - 2025 + 1 },
     (_, index) => 2025 + index
   );
 
-  // Prevent duplicate automatic sync requests for the same month
-  // during React development Strict Mode.
-  const syncStartedFor = useRef(new Set<string>());
-
-  // Prevent automatic and manual synchronisation from overlapping.
-  const syncInProgress = useRef(false);
-
-  // Load saved Sales Results first, then synchronise separately.
+  // Retrieve the selected period's saved figures from Supabase.
   useEffect(() => {
     const controller = new AbortController();
 
@@ -290,8 +129,8 @@ export default function SalesClient({
       try {
         setLoading(true);
         setError("");
+        setRefreshMessage("");
 
-        // STEP 1: Load saved Supabase figures immediately.
         const response = await fetch(
           `/api/cuckoo/sales?month=${month}&year=${year}`,
           {
@@ -310,109 +149,8 @@ export default function SalesClient({
           );
         }
 
-        // Display saved figures without waiting for CUCKOO sync.
-        setSalesData(result);
-        setLoading(false);
-
-        // STEP 2: Only synchronise the current Malaysia month.
-        const nowParts = new Intl.DateTimeFormat("en-CA", {
-          timeZone: "Asia/Kuala_Lumpur",
-          year: "numeric",
-          month: "2-digit",
-        }).formatToParts(new Date());
-
-        const currentYear = Number(
-          nowParts.find((part) => part.type === "year")?.value
-        );
-
-        const currentMonth = Number(
-          nowParts.find((part) => part.type === "month")?.value
-        );
-
-        if (month !== currentMonth || year !== currentYear) {
-          return;
-        }
-
-        const syncKey =
-          `${year}-${String(month).padStart(2, "0")}`;
-
-        if (
-          syncStartedFor.current.has(syncKey) ||
-          syncInProgress.current
-        ) {
-          return;
-        }
-
-        syncStartedFor.current.add(syncKey);
-        syncInProgress.current = true;
-
-        console.log(
-          "[SALES DASHBOARD] Starting sequential sales synchronisation."
-        );
-
-        try {
-          // Synchronise personal and team members separately.
-          const syncResult = await runSalesSync(false);
-
-          console.log(
-            "[SALES DASHBOARD] Synchronisation completed.",
-            {
-              totalMembers: syncResult.totalMembers,
-              failedCount: syncResult.failedCount,
-              inProgressCount: syncResult.inProgressCount,
-              skippedCount: syncResult.skippedCount,
-            }
-          );
-
-          // STEP 3: Refresh dashboard figures after sync.
-          if (controller.signal.aborted) {
-            return;
-          }
-
-          const refreshResponse = await fetch(
-            `/api/cuckoo/sales?month=${month}&year=${year}`,
-            {
-              method: "GET",
-              cache: "no-store",
-              signal: controller.signal,
-            }
-          );
-
-          const refreshedResult =
-            (await refreshResponse.json()) as SalesApiResponse;
-
-          if (
-            !refreshResponse.ok ||
-            !refreshedResult.success
-          ) {
-            throw new Error(
-              refreshedResult.error ||
-                "Unable to refresh sales results."
-            );
-          }
-
-          if (!controller.signal.aborted) {
-            setSalesData(refreshedResult);
-
-            if (syncResult.failedCount > 0) {
-              setSyncMessage(
-                `Automatic sync completed with ${syncResult.failedCount} failed member sync(s).`
-              );
-            } else if (syncResult.inProgressCount > 0) {
-              setSyncMessage(
-                "Some members are already synchronising."
-              );
-            }
-          }
-        } catch (syncError) {
-          syncStartedFor.current.delete(syncKey);
-
-          console.error(
-            "[SALES DASHBOARD] Background sync error:",
-            syncError
-          );
-        } finally {
-          syncInProgress.current = false;
+        if (!controller.signal.aborted) {
+          setSalesData(result);
         }
       } catch (err) {
         if (err instanceof Error && err.name === "AbortError") {
@@ -421,11 +159,13 @@ export default function SalesClient({
 
         console.error("Sales Results error:", err);
 
-        setError(
-          err instanceof Error
-            ? err.message
-            : "Unable to load sales results."
-        );
+        if (!controller.signal.aborted) {
+          setError(
+            err instanceof Error
+              ? err.message
+              : "Unable to load sales results."
+          );
+        }
       } finally {
         if (!controller.signal.aborted) {
           setLoading(false);
@@ -438,23 +178,17 @@ export default function SalesClient({
     return () => controller.abort();
   }, [month, year]);
 
-  /**
-   * Manual refresh.
-   * Force synchronisation is applied to each member individually.
-   */
+  // Refresh only retrieves the latest saved figures from Supabase.
+  // It does not call the CUCKOO API or trigger synchronisation.
   async function handleManualRefresh() {
-    if (syncing || loading || syncInProgress.current) return;
+    if (refreshing || loading) return;
 
-    setSyncing(true);
-    syncInProgress.current = true;
-    setSyncMessage("");
+    setRefreshing(true);
     setError("");
+    setRefreshMessage("");
 
     try {
-      const result = await runSalesSync(true);
-
-      // Reload dashboard figures from Supabase.
-      const refreshResponse = await fetch(
+      const response = await fetch(
         `/api/cuckoo/sales?month=${month}&year=${year}`,
         {
           method: "GET",
@@ -462,52 +196,29 @@ export default function SalesClient({
         }
       );
 
-      const refreshedResult =
-        (await refreshResponse.json()) as SalesApiResponse;
+      const result =
+        (await response.json()) as SalesApiResponse;
 
-      if (
-        !refreshResponse.ok ||
-        !refreshedResult.success
-      ) {
+      if (!response.ok || !result.success) {
         throw new Error(
-          refreshedResult.error ||
-            "Unable to reload sales figures."
+          result.error || "Unable to reload sales figures."
         );
       }
 
-      setSalesData(refreshedResult);
-
-      if (result.failedCount > 0) {
-        setSyncMessage(
-          `Refresh completed with ${result.failedCount} failed member sync(s).`
-        );
-      } else if (result.inProgressCount > 0) {
-        setSyncMessage(
-          "Some members are already synchronising. Please try again shortly."
-        );
-      } else {
-        setSyncMessage(
-          "Sales figures successfully refreshed from CUCKOO."
-        );
-      }
-
-      console.log("[SALES DASHBOARD] Manual refresh summary:", {
-        totalMembers: result.totalMembers,
-        failedCount: result.failedCount,
-        inProgressCount: result.inProgressCount,
-        skippedCount: result.skippedCount,
-      });
+      setSalesData(result);
+      setRefreshMessage(
+        "Sales figures successfully refreshed from Supabase."
+      );
     } catch (err) {
-      console.error("Manual sales refresh error:", err);
+      console.error("Sales data refresh error:", err);
 
-      setSyncMessage(
+      setError(
         err instanceof Error
           ? err.message
-          : "Unable to refresh sales."
+          : "Unable to refresh sales figures."
       );
     } finally {
-      syncInProgress.current = false;
-      setSyncing(false);
+      setRefreshing(false);
     }
   }
 
@@ -676,24 +387,24 @@ export default function SalesClient({
           <button
             type="button"
             onClick={handleManualRefresh}
-            disabled={syncing || loading}
+            disabled={refreshing || loading}
             style={{
               padding: "10px 16px",
-              background: syncing ? "#7890b5" : "#234B87",
+              background: refreshing ? "#7890b5" : "#234B87",
               color: "#ffffff",
               border: "none",
               borderRadius: 8,
               fontWeight: 600,
               cursor:
-                syncing || loading ? "not-allowed" : "pointer",
-              opacity: syncing || loading ? 0.75 : 1,
+                refreshing || loading ? "not-allowed" : "pointer",
+              opacity: refreshing || loading ? 0.75 : 1,
             }}
           >
-            {syncing ? "Refreshing Sales..." : "↻ Refresh Sales"}
+            {refreshing ? "Refreshing..." : "↻ Refresh Sales"}
           </button>
         </div>
 
-        {syncMessage && (
+        {refreshMessage && (
           <p
             role="status"
             aria-live="polite"
@@ -701,16 +412,12 @@ export default function SalesClient({
               margin: "0 0 16px",
               padding: 12,
               borderRadius: 8,
-              background: syncMessage.includes("successfully")
-                ? "#e8f5e9"
-                : "#fff4e5",
-              color: syncMessage.includes("successfully")
-                ? "#237a38"
-                : "#8a5700",
+              background: "#e8f5e9",
+              color: "#237a38",
               fontSize: 13,
             }}
           >
-            {syncMessage}
+            {refreshMessage}
           </p>
         )}
 
