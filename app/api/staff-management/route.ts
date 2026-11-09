@@ -1,4 +1,3 @@
-
 import { NextResponse } from "next/server";
 import { createClient } from "@/lib/supabase/server";
 import { createAdminClient } from "@/lib/supabase/admin";
@@ -63,7 +62,7 @@ export async function GET() {
   const { data: staff, error: staffError } = await admin
     .from("staff_profiles")
     .select(
-      "id, member_code, full_name, role, organization_type, manager_id, status"
+      "id, member_code, full_name, role, organization_type, manager_id, status, user_id"
     )
     .order("full_name", { ascending: true });
 
@@ -84,7 +83,6 @@ export async function GET() {
 
 export async function POST(request: Request) {
   try {
-    // 1. Verify authenticated user.
     const supabase = await createClient();
 
     const {
@@ -101,7 +99,6 @@ export async function POST(request: Request) {
       );
     }
 
-    // 2. Verify Director access.
     const { data: director, error: directorError } =
       await supabase
         .from("staff_profiles")
@@ -118,6 +115,7 @@ export async function POST(request: Request) {
     }
 
     const rawBody: unknown = await request.json();
+
     const body: Record<string, unknown> =
       typeof rawBody === "object" &&
       rawBody !== null &&
@@ -135,6 +133,11 @@ export async function POST(request: Request) {
         ? body.full_name.trim()
         : "";
 
+    const phoneNumber =
+      typeof body.phone_number === "string"
+        ? body.phone_number.trim()
+        : "";
+
     const role = body.role;
     const organizationType = body.organization_type;
 
@@ -143,21 +146,23 @@ export async function POST(request: Request) {
         ? body.manager_id
         : null;
 
-    // 3. Validate staff details.
     if (
       !/^[A-Z0-9_-]{3,40}$/.test(memberCode) ||
       fullName.length < 2 ||
       fullName.length > 100 ||
+      !/^\+[1-9]\d{7,14}$/.test(phoneNumber) ||
       !isAllowedRole(role) ||
       !isAllowedOrganization(organizationType)
     ) {
       return NextResponse.json(
-        { error: "Invalid staff details." },
+        {
+          error:
+            "Invalid staff details. Check the Member Code, name, phone number and role.",
+        },
         { status: 400 }
       );
     }
 
-    // 4. Validate reporting manager.
     const admin = createAdminClient();
 
     if (!managerId) {
@@ -182,7 +187,6 @@ export async function POST(request: Request) {
       );
     }
 
-    // 5. Validate permitted reporting relationships.
     const validReportingLine =
       (
         role === "GAM" &&
@@ -213,7 +217,7 @@ export async function POST(request: Request) {
         manager.organization_type === "ACTION_FORCE" &&
         organizationType === "ACTION_FORCE"
       );
-    
+
     if (!validReportingLine) {
       return NextResponse.json(
         { error: "Invalid reporting hierarchy." },
@@ -221,13 +225,13 @@ export async function POST(request: Request) {
       );
     }
 
-    // 6. Create staff profile.
     const { data: created, error: insertError } =
       await admin
         .from("staff_profiles")
         .insert({
           member_code: memberCode,
           full_name: fullName,
+          phone_number: phoneNumber,
           role,
           organization_type: organizationType,
           manager_id: managerId,
@@ -264,7 +268,6 @@ export async function POST(request: Request) {
       { staff: created },
       { status: 201 }
     );
-
   } catch (error) {
     console.error(
       "Staff management request failed:",

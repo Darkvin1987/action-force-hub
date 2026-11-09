@@ -1,5 +1,3 @@
-
-import { randomBytes } from "node:crypto";
 import { NextResponse } from "next/server";
 import { createClient } from "@/lib/supabase/server";
 import { createAdminClient } from "@/lib/supabase/admin";
@@ -10,8 +8,8 @@ export async function POST(request: Request) {
   let admin: ReturnType<typeof createAdminClient> | null = null;
 
   try {
-    // Verify the authenticated session.
     const supabase = await createClient();
+
     const { data, error } = await supabase.auth.getClaims();
     const userId = data?.claims?.sub;
 
@@ -22,7 +20,6 @@ export async function POST(request: Request) {
       );
     }
 
-    // Only an active Director may create staff accounts.
     const { data: director, error: directorError } =
       await supabase
         .from("staff_profiles")
@@ -38,7 +35,6 @@ export async function POST(request: Request) {
       );
     }
 
-    // Validate the request body.
     let body: unknown;
 
     try {
@@ -67,26 +63,25 @@ export async function POST(request: Request) {
     const profileId = body.staff_profile_id.trim();
     const email = body.email.trim().toLowerCase();
 
-    
-if (
-  !/^[0-9a-f]{8}-[0-9a-f]{4}-[1-8][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i.test(profileId) ||
-  email.length > 254 ||
-  !/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email)
-) {
-  return NextResponse.json(
-    { error: "Please provide a valid profile and email." },
-    { status: 400 }
-  );
-}
-
+    if (
+      !/^[0-9a-f]{8}-[0-9a-f]{4}-[1-8][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i.test(profileId) ||
+      email.length > 254 ||
+      !/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email)
+    ) {
+      return NextResponse.json(
+        { error: "Please provide a valid profile and email." },
+        { status: 400 }
+      );
+    }
 
     admin = createAdminClient();
 
-    // Only create accounts for active staff without an existing login.
     const { data: profile, error: profileError } =
       await admin
         .from("staff_profiles")
-        .select("id, member_code, full_name, role, status, user_id")
+        .select(
+          "id, member_code, full_name, role, status, user_id, phone_number"
+        )
         .eq("id", profileId)
         .maybeSingle();
 
@@ -108,7 +103,21 @@ if (
       );
     }
 
-    // Prevent creating a second login mapping for this staff ID.
+    const initialPassword =
+      typeof profile.phone_number === "string"
+        ? profile.phone_number.trim()
+        : "";
+
+    if (!/^\+[1-9]\d{7,14}$/.test(initialPassword)) {
+      return NextResponse.json(
+        {
+          error:
+            "This staff profile does not have a valid registered mobile number. Update the profile before creating the login account.",
+        },
+        { status: 400 }
+      );
+    }
+
     const { data: existingMapping, error: mappingCheckError } =
       await admin
         .from("staff_login_map")
@@ -117,7 +126,11 @@ if (
         .maybeSingle();
 
     if (mappingCheckError) {
-      console.error("Staff mapping check failed:", mappingCheckError.message);
+      console.error(
+        "Staff mapping check failed:",
+        mappingCheckError.message
+      );
+
       return NextResponse.json(
         { error: "Unable to verify the existing login mapping." },
         { status: 500 }
@@ -131,14 +144,10 @@ if (
       );
     }
 
-    // Generate a strong temporary password on the server.
-    const temporaryPassword =
-      randomBytes(24).toString("base64url") + "aA1!";
-
     const { data: authData, error: authError } =
       await admin.auth.admin.createUser({
         email,
-        password: temporaryPassword,
+        password: initialPassword,
         email_confirm: true,
         user_metadata: {
           member_code: profile.member_code,
@@ -147,16 +156,22 @@ if (
       });
 
     if (authError || !authData.user) {
-      console.error("Auth user creation failed:", authError?.message);
+      console.error(
+        "Auth user creation failed:",
+        authError?.message
+      );
+
       return NextResponse.json(
-        { error: "Unable to create the login account. Check whether the email is already registered." },
+        {
+          error:
+            "Unable to create the login account. Check whether the email is already registered.",
+        },
         { status: 400 }
       );
     }
 
     createdUserId = authData.user.id;
 
-    // Link the new Auth account to the staff profile.
     const { data: linkedProfile, error: linkError } =
       await admin
         .from("staff_profiles")
@@ -170,7 +185,9 @@ if (
         .maybeSingle();
 
     if (linkError || !linkedProfile) {
-      throw new Error("Unable to link the Auth account to the staff profile.");
+      throw new Error(
+        "Unable to link the Auth account to the staff profile."
+      );
     }
 
     linkedProfileId = linkedProfile.id;
@@ -183,10 +200,11 @@ if (
       });
 
     if (mappingError) {
-      throw new Error("Unable to create the staff login mapping.");
+      throw new Error(
+        "Unable to create the staff login mapping."
+      );
     }
 
-    // Return the password only once, immediately after creation.
     return NextResponse.json(
       {
         message: "Staff login account created successfully.",
@@ -195,17 +213,18 @@ if (
           full_name: profile.full_name,
           email,
         },
-        temporary_password: temporaryPassword,
+        temporary_password: initialPassword,
       },
       { status: 201 }
     );
   } catch (error) {
     console.error(
       "Staff account creation failed:",
-      error instanceof Error ? error.message : "Unknown error"
+      error instanceof Error
+        ? error.message
+        : "Unknown error"
     );
 
-    // Best-effort rollback if linking or mapping fails.
     if (admin && createdUserId) {
       if (linkedProfileId) {
         await admin
