@@ -42,14 +42,15 @@ export async function getSalesStatusCounts(
   }
 
   async function countOrders(
-    configure: (query: any) => any
+    configure: (query: any) => any,
+    dateColumn: "sales_date" | "net_date" = "sales_date"
   ) {
     let query = supabase
       .from("cuckoo_sales_orders")
       .select("sales_no", { count: "exact", head: true })
       .in("member_code", memberCodes)
-      .gte("sales_date", from)
-      .lt("sales_date", toExclusive);
+      .gte(dateColumn, from)
+      .lt(dateColumn, toExclusive);
 
     query = configure(query);
 
@@ -74,9 +75,15 @@ export async function getSalesStatusCounts(
     pendingDocumentSubmission,
     pendingPayment,
   ] = await Promise.all([
-    countOrders((q) => q.not("net_date", "is", null)),
+    // NET Sales: calculate using net_date
+    countOrders(
+      (q) => q.not("net_date", "is", null),
+      "net_date"
+    ),
+
+    // Other categories: continue using sales_date
     countOrders((q) =>
-      q.eq("is_paid", false).eq("status_name", "Active")
+      q.eq("is_paid", false).eq("step_name", "Installation Complete")
     ),
     countOrders((q) =>
       q.eq("step_name", "Installation Stage")
