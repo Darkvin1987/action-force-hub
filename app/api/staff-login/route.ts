@@ -1,17 +1,15 @@
 
 import { NextRequest, NextResponse } from "next/server";
-import { createClient as createSupabaseClient } from "@supabase/supabase-js";
 import { createServerClient } from "@supabase/ssr";
-import { env } from "cloudflare:workers";
+import { createAdminClient } from "@/lib/supabase/admin";
 
 export async function POST(request: NextRequest) {
   try {
-    const rawBody: unknown = await request.json();
-
-    const body =
-      typeof rawBody === "object" && rawBody !== null
-        ? (rawBody as Record<string, unknown>)
-        : {};
+    // 1. Get login details
+    const body: {
+      memberCode?: string;
+      password?: string;
+    } = await request.json();
 
     const memberCode =
       typeof body.memberCode === "string"
@@ -27,83 +25,135 @@ export async function POST(request: NextRequest) {
       password.length > 256
     ) {
       return NextResponse.json(
-        { error: "Invalid Member Code or password." },
-        { status: 400 }
+        { ok: false, message: "Invalid member code or password." },
+        { status: 401 }
       );
     }
 
+    // 2. Check environment variables
     const supabaseUrl = process.env.NEXT_PUBLIC_SUPABASE_URL;
-    const publishableKey =
+    const supabasePublishableKey =
       process.env.NEXT_PUBLIC_SUPABASE_PUBLISHABLE_KEY;
 
-    const secretKey =
-      env.SUPABASE_SECRET_KEY || process.env.SUPABASE_SECRET_KEY;
-
-    // Server-only client: look up the Member Code securely.
-    if (!supabaseUrl || !publishableKey || !secretKey) {
-      console.error("Staff login server configuration is missing.");
+    if (!supabaseUrl || !supabasePublishableKey) {
+      console.error("Missing Supabase environment variables.");
 
       return NextResponse.json(
-        { error: "Login service is not configured." },
+        { ok: false, message: "Server configuration error." },
         { status: 500 }
       );
     }
 
-    // Server-only client: look up the Member Code securely.
-    const admin = createSupabaseClient(supabaseUrl, secretKey, {
-      auth: {
-        autoRefreshToken: false,
-        persistSession: false,
-      },
-    });
+    // 3. Create Supabase admin client
+    const admin = createAdminClient();
 
-    const { data: mapping, error: mappingError } = await admin
-      .from("staff_login_map")
-      .select("user_id")
+    // 4. Find staff profile using Member Code
+    const { data: profile, error: profileError } = await admin
+      .from("staff_profiles")
+      .select(
+        "id, user_id, member_code, phone_number, must_change_password, status"
+      )
       .eq("member_code", memberCode)
       .maybeSingle();
 
-    if (mappingError) {
-      console.error("Member Code lookup failed:", mappingError.message);
+    if (profileError) {
+      console.error("Staff profile lookup error:", profileError.message);
 
       return NextResponse.json(
-        { error: "Login lookup failed. Check the server terminal." },
+        { ok: false, message: "Unable to verify staff account." },
         { status: 500 }
       );
     }
 
-    if (!mapping) {
-      console.error("No staff mapping found for submitted Member Code.");
-
+    // 5. Check staff account
+    if (!profile || profile.status !== "ACTIVE") {
       return NextResponse.json(
-        { error: "Member Code is not registered." },
+        { ok: false, message: "Invalid member code or password." },
         { status: 401 }
       );
     }
 
-    const { data: userResult, error: userError } =
-      await admin.auth.admin.getUserById(mapping.user_id);
+    // 6. Check whether staff has a linked Supabase Auth account
+    if (!profile.user_id) {
+      return NextResponse.json(
+        {
+          ok: false,
+          message:
+            "Your staff account is not linked to a login account. Please contact your administrator.",
+        },
+        { status: 403 }
+      );
+    }
 
-    const email = userResult?.user?.email;
+    // 7. Retrieve email from Supabase Auth using user_id
+    const { data: userData, error: userError } =
+      await admin.auth.admin.getUserById(profile.user_id);
 
-    if (userError || !email) {
+    if (userError || !userData.user?.email) {
       console.error(
-        "Mapped Supabase user could not be retrieved:",
-        userError?.message ?? "User email is missing."
+        "Unable to retrieve Supabase Auth user:",
+        userError?.message
       );
 
       return NextResponse.json(
-        { error: "Mapped account could not be retrieved." },
-        { status: 401 }
+        {
+          ok: false,
+          message: "Unable to verify your login account.",
+        },
+        { status: 500 }
       );
     }
 
-    // Supabase SSR client: sign in and store the session in response cookies.
-    const response = NextResponse.json({ ok: true });
+    const email = userData.user.email;
+
+    // 8. Check first-time login
+    const mustChangePassword =
+      profile.must_change_password === true;
+
+    if (mustChangePassword) {
+      const registeredPhone = profile.phone_number;
+
+      if (!registeredPhone || password !== registeredPhone) {
+        return NextResponse.json(
+          { ok: false, message: "Invalid member code or password." },
+          { status: 401 }
+        );
+      }
+
+      // 9. Synchronise initial password with Supabase Auth
+      const { error: updateError } =
+        await admin.auth.admin.updateUserById(profile.user_id, {
+          password: registeredPhone,
+        });
+
+      if (updateError) {
+        console.error(
+          "Initial password synchronisation error:",
+          updateError.message
+        );
+
+        return NextResponse.json(
+          {
+            ok: false,
+            message: "Unable to initialise your account.",
+          },
+          { status: 500 }
+        );
+      }
+    }
+
+    // 10. Create Supabase session
+    const response = NextResponse.json({
+      ok: true,
+      mustChangePassword,
+      message: mustChangePassword
+        ? "First login successful. Please set a new password."
+        : "Login successful.",
+    });
 
     const supabase = createServerClient(
       supabaseUrl,
-      publishableKey,
+      supabasePublishableKey,
       {
         cookies: {
           getAll() {
@@ -118,6 +168,7 @@ export async function POST(request: NextRequest) {
       }
     );
 
+    // 11. Sign in using Supabase Auth
     const { error: signInError } =
       await supabase.auth.signInWithPassword({
         email,
@@ -126,24 +177,31 @@ export async function POST(request: NextRequest) {
 
     if (signInError) {
       console.error(
-        "Supabase password sign-in failed:",
+        "Supabase sign-in error:",
         signInError.message
       );
 
       return NextResponse.json(
-        { error: "Supabase rejected the login. Check the server terminal." },
+        {
+          ok: false,
+          message: "Invalid member code or password.",
+        },
         { status: 401 }
       );
     }
 
+    // 12. Return successful login
     return response;
 
   } catch (error) {
-    console.error("Staff login request failed:", error);
+    console.error("Staff login API error:", error);
 
     return NextResponse.json(
-      { error: "Unable to process login request." },
-      { status: 400 }
+      {
+        ok: false,
+        message: "An unexpected error occurred.",
+      },
+      { status: 500 }
     );
   }
 }
