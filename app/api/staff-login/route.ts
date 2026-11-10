@@ -4,6 +4,8 @@ import { createServerClient } from "@supabase/ssr";
 import { createAdminClient } from "@/lib/supabase/admin";
 
 export async function POST(request: NextRequest) {
+  let memberCode = "";
+
   try {
     // 1. Get login details
     const body: {
@@ -11,7 +13,7 @@ export async function POST(request: NextRequest) {
       password?: string;
     } = await request.json();
 
-    const memberCode =
+    memberCode =
       typeof body.memberCode === "string"
         ? body.memberCode.trim().toUpperCase()
         : "";
@@ -19,11 +21,22 @@ export async function POST(request: NextRequest) {
     const password =
       typeof body.password === "string" ? body.password : "";
 
+    console.log("[STAFF LOGIN ATTEMPT]", {
+      memberCode,
+      timestamp: new Date().toISOString(),
+    });
+
     if (
       !/^[A-Z0-9_-]{3,40}$/.test(memberCode) ||
       password.length < 1 ||
       password.length > 256
     ) {
+      console.error("[STAFF LOGIN FAILED]", {
+        memberCode,
+        stage: "INPUT_VALIDATION",
+        reason: "INVALID_MEMBER_CODE_OR_PASSWORD_FORMAT",
+      });
+
       return NextResponse.json(
         { ok: false, message: "Invalid member code or password." },
         { status: 401 }
@@ -36,7 +49,11 @@ export async function POST(request: NextRequest) {
       process.env.NEXT_PUBLIC_SUPABASE_PUBLISHABLE_KEY;
 
     if (!supabaseUrl || !supabasePublishableKey) {
-      console.error("Missing Supabase environment variables.");
+      console.error("[STAFF LOGIN FAILED]", {
+        memberCode,
+        stage: "ENVIRONMENT_CHECK",
+        reason: "MISSING_SUPABASE_ENVIRONMENT_VARIABLES",
+      });
 
       return NextResponse.json(
         { ok: false, message: "Server configuration error." },
@@ -57,7 +74,11 @@ export async function POST(request: NextRequest) {
       .maybeSingle();
 
     if (profileError) {
-      console.error("Staff profile lookup error:", profileError.message);
+      console.error("[STAFF LOGIN FAILED]", {
+        memberCode,
+        stage: "PROFILE_LOOKUP",
+        reason: profileError.message,
+      });
 
       return NextResponse.json(
         { ok: false, message: "Unable to verify staff account." },
@@ -67,6 +88,15 @@ export async function POST(request: NextRequest) {
 
     // 5. Check staff account
     if (!profile || profile.status !== "ACTIVE") {
+      console.error("[STAFF LOGIN FAILED]", {
+        memberCode,
+        stage: "PROFILE_CHECK",
+        reason: !profile
+          ? "STAFF_PROFILE_NOT_FOUND"
+          : "STAFF_ACCOUNT_INACTIVE",
+        status: profile?.status ?? null,
+      });
+
       return NextResponse.json(
         { ok: false, message: "Invalid member code or password." },
         { status: 401 }
@@ -75,6 +105,12 @@ export async function POST(request: NextRequest) {
 
     // 6. Check whether staff has a linked Supabase Auth account
     if (!profile.user_id) {
+      console.error("[STAFF LOGIN FAILED]", {
+        memberCode,
+        stage: "PROFILE_LINK_CHECK",
+        reason: "STAFF_PROFILE_NOT_LINKED",
+      });
+
       return NextResponse.json(
         {
           ok: false,
@@ -90,10 +126,12 @@ export async function POST(request: NextRequest) {
       await admin.auth.admin.getUserById(profile.user_id);
 
     if (userError || !userData.user?.email) {
-      console.error(
-        "Unable to retrieve Supabase Auth user:",
-        userError?.message
-      );
+      console.error("[STAFF LOGIN FAILED]", {
+        memberCode,
+        stage: "AUTH_USER_LOOKUP",
+        reason: userError?.message ?? "AUTH_USER_EMAIL_MISSING",
+        userId: profile.user_id,
+      });
 
       return NextResponse.json(
         {
@@ -114,6 +152,14 @@ export async function POST(request: NextRequest) {
       const registeredPhone = profile.phone_number;
 
       if (!registeredPhone || password !== registeredPhone) {
+        console.error("[STAFF LOGIN FAILED]", {
+          memberCode,
+          stage: "INITIAL_PASSWORD_CHECK",
+          reason: !registeredPhone
+            ? "REGISTERED_PHONE_MISSING"
+            : "INITIAL_PASSWORD_MISMATCH",
+        });
+
         return NextResponse.json(
           { ok: false, message: "Invalid member code or password." },
           { status: 401 }
@@ -127,10 +173,12 @@ export async function POST(request: NextRequest) {
         });
 
       if (updateError) {
-        console.error(
-          "Initial password synchronisation error:",
-          updateError.message
-        );
+        console.error("[STAFF LOGIN FAILED]", {
+          memberCode,
+          stage: "PASSWORD_SYNC",
+          reason: updateError.message,
+          userId: profile.user_id,
+        });
 
         return NextResponse.json(
           {
@@ -176,10 +224,13 @@ export async function POST(request: NextRequest) {
       });
 
     if (signInError) {
-      console.error(
-        "Supabase sign-in error:",
-        signInError.message
-      );
+      console.error("[STAFF LOGIN FAILED]", {
+        memberCode,
+        stage: "SUPABASE_SIGN_IN",
+        reason: signInError.message,
+        userId: profile.user_id,
+        timestamp: new Date().toISOString(),
+      });
 
       return NextResponse.json(
         {
@@ -190,11 +241,24 @@ export async function POST(request: NextRequest) {
       );
     }
 
-    // 12. Return successful login
+    // 12. Successful login
+    console.log("[STAFF LOGIN SUCCESS]", {
+      memberCode,
+      userId: profile.user_id,
+      mustChangePassword,
+      timestamp: new Date().toISOString(),
+    });
+
     return response;
 
   } catch (error) {
-    console.error("Staff login API error:", error);
+    console.error("[STAFF LOGIN FAILED]", {
+      memberCode,
+      stage: "UNEXPECTED_ERROR",
+      reason:
+        error instanceof Error ? error.message : "UNKNOWN_ERROR",
+      timestamp: new Date().toISOString(),
+    });
 
     return NextResponse.json(
       {
