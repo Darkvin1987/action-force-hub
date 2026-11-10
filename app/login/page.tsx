@@ -51,8 +51,8 @@ function LoginForm() {
       if (!response.ok) {
         setErrorMessage(
           result.message ||
-          result.error ||
-          "Login failed. Please try again."
+            result.error ||
+            "Login failed. Please try again."
         );
         return;
       }
@@ -65,7 +65,9 @@ function LoginForm() {
       window.location.href = destination;
 
     } catch {
-      setErrorMessage("Something went wrong. Please try again.");
+      setErrorMessage(
+        "Something went wrong. Please try again."
+      );
     } finally {
       setLoading(false);
     }
@@ -74,7 +76,10 @@ function LoginForm() {
   return (
     <main className="login-page">
       <section className="login-card">
-        <div className="login-brand">ACTION FORCE</div>
+
+        <div className="login-brand">
+          ACTION FORCE
+        </div>
 
         <h1>Action Force Hub</h1>
 
@@ -83,7 +88,10 @@ function LoginForm() {
         </p>
 
         <form onSubmit={handleLogin}>
-          <label htmlFor="memberCode">Member Code</label>
+
+          <label htmlFor="memberCode">
+            Member Code
+          </label>
 
           <input
             id="memberCode"
@@ -99,7 +107,9 @@ function LoginForm() {
             required
           />
 
-          <label htmlFor="password">Password</label>
+          <label htmlFor="password">
+            Password
+          </label>
 
           <input
             id="password"
@@ -113,14 +123,23 @@ function LoginForm() {
             required
           />
 
-          <div style={{ textAlign: "right", marginTop: "8px", marginBottom: "18px" }}>
+          {/* Forgot Password Link */}
+          <div
+            style={{
+              display: "flex",
+              justifyContent: "flex-end",
+              marginTop: 8,
+              marginBottom: 18,
+            }}
+          >
             <Link
               href="/forgot-password"
               style={{
                 color: "#24518D",
-                fontSize: "13px",
+                fontSize: 13,
                 fontWeight: 600,
                 textDecoration: "none",
+                cursor: "pointer",
               }}
             >
               Forgot Password?
@@ -128,19 +147,28 @@ function LoginForm() {
           </div>
 
           {errorMessage && (
-            <p className="login-error" role="alert">
+            <p
+              className="login-error"
+              role="alert"
+            >
               {errorMessage}
             </p>
           )}
 
-          <button type="submit" disabled={loading}>
+          {/* Normal Sign In Button */}
+          <button
+            type="submit"
+            disabled={loading}
+          >
             {loading ? "Signing in..." : "Sign In"}
           </button>
+
         </form>
 
         <p className="login-footer">
           Authorized Action Force members only.
         </p>
+
       </section>
     </main>
   );
@@ -148,7 +176,9 @@ function LoginForm() {
 
 export default function LoginPage() {
   return (
-    <Suspense fallback={<div>Loading login page...</div>}>
+    <Suspense
+      fallback={<div>Loading login page...</div>}
+    >
       <LoginForm />
     </Suspense>
   );
