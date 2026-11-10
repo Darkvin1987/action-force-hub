@@ -2,6 +2,7 @@
 "use client";
 
 import { useState, Suspense } from "react";
+import Link from "next/link";
 import { useSearchParams } from "next/navigation";
 
 function LoginForm() {
@@ -13,7 +14,9 @@ function LoginForm() {
   const [errorMessage, setErrorMessage] = useState("");
   const [loading, setLoading] = useState(false);
 
-  async function handleLogin(event: React.FormEvent<HTMLFormElement>) {
+  async function handleLogin(
+    event: React.FormEvent<HTMLFormElement>
+  ) {
     event.preventDefault();
     setErrorMessage("");
     setLoading(true);
@@ -40,12 +43,16 @@ function LoginForm() {
       });
 
       const result = (await response.json()) as {
+        ok?: boolean;
         error?: string;
+        message?: string;
       };
 
       if (!response.ok) {
         setErrorMessage(
-          result.error || "Login failed. Please try again."
+          result.message ||
+          result.error ||
+          "Login failed. Please try again."
         );
         return;
       }
@@ -84,7 +91,9 @@ function LoginForm() {
             autoComplete="username"
             placeholder="Enter your Member Code"
             value={memberCode}
-            onChange={(event) => setMemberCode(event.target.value)}
+            onChange={(event) =>
+              setMemberCode(event.target.value)
+            }
             minLength={3}
             maxLength={40}
             required
@@ -98,9 +107,25 @@ function LoginForm() {
             autoComplete="current-password"
             placeholder="Enter your password"
             value={password}
-            onChange={(event) => setPassword(event.target.value)}
+            onChange={(event) =>
+              setPassword(event.target.value)
+            }
             required
           />
+
+          <div style={{ textAlign: "right", marginTop: "8px", marginBottom: "18px" }}>
+            <Link
+              href="/forgot-password"
+              style={{
+                color: "#24518D",
+                fontSize: "13px",
+                fontWeight: 600,
+                textDecoration: "none",
+              }}
+            >
+              Forgot Password?
+            </Link>
+          </div>
 
           {errorMessage && (
             <p className="login-error" role="alert">
@@ -114,8 +139,7 @@ function LoginForm() {
         </form>
 
         <p className="login-footer">
-          Authorized Action Force members only. Contact your
-          administrator if you need an account or password reset.
+          Authorized Action Force members only.
         </p>
       </section>
     </main>
