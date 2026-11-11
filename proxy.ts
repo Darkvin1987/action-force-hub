@@ -6,10 +6,13 @@ import { env } from "cloudflare:workers";
 export async function proxy(request: NextRequest) {
   const { pathname } = request.nextUrl;
 
-  // These routes handle their own authentication.
+  // Public routes that do not require an existing login session.
+  // These routes handle their own validation.
   if (
     pathname === "/login" ||
+    pathname === "/forgot-password" ||
     pathname === "/api/staff-login" ||
+    pathname === "/api/forgot-password" ||
     pathname === "/api/change-password"
   ) {
     return NextResponse.next({ request });
