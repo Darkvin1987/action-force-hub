@@ -27,7 +27,7 @@ export default function ForgotPasswordPage() {
       const normalizedEmail = email.trim().toLowerCase();
 
       if (!/^[A-Z0-9_-]{3,40}$/.test(normalizedCode)) {
-        setErrorMessage("Please enter a valid Member Code.");
+        setErrorMessage("Please enter a valid ASPE Code.");
         return;
       }
 
@@ -90,20 +90,20 @@ export default function ForgotPasswordPage() {
         {!successMessage ? (
           <>
             <p className="login-subtitle">
-              Enter your Member Code and registered email address
+              Enter your ASPE Code and registered email address
               to reset your password.
             </p>
 
             <form onSubmit={handleReset}>
               <label htmlFor="memberCode">
-                Member Code
+                ASPE Code
               </label>
 
               <input
                 id="memberCode"
                 type="text"
                 autoComplete="username"
-                placeholder="Enter your Member Code"
+                placeholder="Enter your ASPE Code"
                 value={memberCode}
                 onChange={(event) =>
                   setMemberCode(event.target.value)
@@ -147,7 +147,7 @@ export default function ForgotPasswordPage() {
             </form>
 
             <p className="login-footer">
-              Your Member Code and email address must match
+              Your ASPE Code and email address must match
               your registered staff account.
             </p>
           </>
@@ -216,7 +216,7 @@ export default function ForgotPasswordPage() {
               >
                 Please use your full registered phone number,
                 including the +6 prefix, together with your
-                Member Code to log in. You will be required
+                ASPE Code to log in. You will be required
                 to create a new password.
               </p>
             </div>

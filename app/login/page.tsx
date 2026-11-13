@@ -84,20 +84,20 @@ function LoginForm() {
         <h1>Action Force Hub</h1>
 
         <p className="login-subtitle">
-          Sign in using your Member Code and password.
+          Sign in using your ASPE Code and password.
         </p>
 
         <form onSubmit={handleLogin}>
 
           <label htmlFor="memberCode">
-            Member Code
+            ASPE Code
           </label>
 
           <input
             id="memberCode"
             type="text"
             autoComplete="username"
-            placeholder="Enter your Member Code"
+            placeholder="Enter your ASPE Code"
             value={memberCode}
             onChange={(event) =>
               setMemberCode(event.target.value)
