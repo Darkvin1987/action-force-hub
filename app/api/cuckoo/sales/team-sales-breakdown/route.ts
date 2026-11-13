@@ -34,6 +34,9 @@ type SalesGroup = {
   netSales: number;
   overallSales: number;
   members: SalesNode[];
+
+  // Independent ID staff displayed outside this section.
+  standaloneMembers: SalesNode[];
 };
 
 function getCurrentMalaysiaPeriod() {
@@ -160,9 +163,19 @@ export async function GET(request: Request) {
       );
     }
 
-    const members: TeamMember[] = profiles ?? [];
+    const allMembers: TeamMember[] = profiles ?? [];
 
-    // 5. Retrieve sales counts for the selected month.
+    // Keep ID staff separate from the normal reporting hierarchy.
+    const idMembers = allMembers.filter(
+      (member) => member.role?.trim().toUpperCase() === "ID"
+    );
+
+    const members = allMembers.filter(
+      (member) => member.role?.trim().toUpperCase() !== "ID"
+    );
+
+    // 5. Retrieve sales for all authorised members,
+    // including ID staff for their separate rows.
     const { monthStart, nextMonthStart } =
       getMonthRange(year, month);
 
@@ -194,7 +207,7 @@ export async function GET(request: Request) {
       });
     }
 
-    // 6. Build the reporting relationships.
+    // 6. Build reporting relationships using non-ID members only.
     const childrenByManager = new Map<string, TeamMember[]>();
 
     for (const member of members) {
@@ -279,14 +292,39 @@ export async function GET(request: Request) {
           new Set<string>()
         );
 
+        // Find ID staff reporting directly to this GAM/AM.
+        // They are displayed separately, outside the section.
+        const standaloneMembers: SalesNode[] = idMembers
+          .filter(
+            (member) => member.manager_id === directReport.id
+          )
+          .sort((a, b) =>
+            a.full_name.localeCompare(b.full_name)
+          )
+          .map((member) => {
+            const sales = salesByMember.get(member.member_code);
+
+            return {
+              memberCode: member.member_code,
+              name: member.full_name,
+              role: member.role,
+              netSales: sales?.netSales ?? 0,
+              overallSales: sales?.overallSales ?? 0,
+              groupNetSales: 0,
+              groupOverallSales: 0,
+              children: [],
+            };
+          });
+
         groups.push({
           title: `${directReport.role} — ${directReport.full_name}`,
           netSales: root.groupNetSales,
           overallSales: root.groupOverallSales,
           members: [root],
+          standaloneMembers: [],
         });
       } else {
-        // Direct SC / ID reports are grouped together.
+        // Direct non-GAM / non-AM reports are grouped together.
         directReportRoots.push(directReport);
       }
     }
@@ -308,9 +346,39 @@ export async function GET(request: Request) {
           0
         ),
         members: roots,
+        standaloneMembers: [],
       });
     }
 
+    // 9. Place ALL ID staff immediately after GAM — TIEW ZI CHING.
+    // Their sales remain separate from GAM group totals.
+
+    const tiewGroup = groups.find(
+      (group) =>
+        group.title.toUpperCase().includes("TIEW ZI CHING")
+    );
+
+    if (tiewGroup) {
+      tiewGroup.standaloneMembers = idMembers
+        .sort((a, b) =>
+          a.full_name.localeCompare(b.full_name)
+        )
+        .map((member) => {
+          const sales = salesByMember.get(member.member_code);
+
+          return {
+            memberCode: member.member_code,
+            name: member.full_name,
+            role: member.role,
+            netSales: sales?.netSales ?? 0,
+            overallSales: sales?.overallSales ?? 0,
+            groupNetSales: 0,
+            groupOverallSales: 0,
+            children: [],
+          };
+        });
+    }
+    
     // 10. Return the completed hierarchy.
     return NextResponse.json(
       {

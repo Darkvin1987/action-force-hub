@@ -19,6 +19,7 @@ type SalesGroup = {
   netSales: number;
   overallSales: number;
   members: SalesNode[];
+  standaloneMembers?: SalesNode[];
 };
 
 type SalesBreakdownResponse = {
@@ -450,136 +451,163 @@ export default function TeamSalesBreakdown({
           }}
         >
           {groups.map((group) => (
-            <details
+            <div
               key={group.title}
               style={{
-                border: "1px solid #e2e8f0",
-                borderRadius: 12,
-                background: "#ffffff",
-                overflow: "hidden",
+                display: "flex",
+                flexDirection: "column",
+                gap: 8,
               }}
             >
-              <summary
+              {/* Existing expandable GAM / AM section */}
+              <details
                 style={{
-                  listStyle: "none",
-                  cursor: "pointer",
-                  padding: 16,
-                  background: "#f8fafc",
+                  border: "1px solid #e2e8f0",
+                  borderRadius: 12,
+                  background: "#ffffff",
+                  overflow: "hidden",
                 }}
               >
-                <div
+                <summary
                   style={{
-                    display: "flex",
-                    alignItems: "center",
-                    justifyContent: "space-between",
-                    gap: 16,
-                    flexWrap: "wrap",
+                    listStyle: "none",
+                    cursor: "pointer",
+                    padding: 16,
+                    background: "#f8fafc",
                   }}
                 >
                   <div
                     style={{
                       display: "flex",
                       alignItems: "center",
-                      gap: 9,
+                      justifyContent: "space-between",
+                      gap: 16,
+                      flexWrap: "wrap",
                     }}
                   >
-                    <span
-                      aria-hidden="true"
-                      className="sales-tree-arrow"
-                    >
-                      <span className="arrow-right">▶</span>
-                      <span className="arrow-down">▼</span>
-                    </span>
-
-                    <strong
+                    <div
                       style={{
-                        fontSize: 14,
-                        color: "#1e293b",
+                        display: "flex",
+                        alignItems: "center",
+                        gap: 9,
                       }}
                     >
-                      {group.title}
-                    </strong>
-                  </div>
-
-                  <div
-                    style={{
-                      display: "flex",
-                      gap: 18,
-                    }}
-                  >
-                    <div style={{ textAlign: "right" }}>
-                      <div
-                        style={{
-                          fontSize: 10,
-                          color: "#64748b",
-                        }}
+                      <span
+                        aria-hidden="true"
+                        className="sales-tree-arrow"
                       >
-                        Net Sales
-                      </div>
+                        <span className="arrow-right">▶</span>
+                        <span className="arrow-down">▼</span>
+                      </span>
 
                       <strong
                         style={{
-                          fontSize: 15,
+                          fontSize: 14,
                           color: "#1e293b",
-                          fontVariantNumeric: "tabular-nums",
                         }}
                       >
-                        {formatNumber(group.netSales)}
+                        {group.title}
                       </strong>
                     </div>
-
-                    <div style={{ textAlign: "right" }}>
-                      <div
-                        style={{
-                          fontSize: 10,
-                          color: "#64748b",
-                        }}
-                      >
-                        Overall Sales
-                      </div>
-
-                      <strong
-                        style={{
-                          fontSize: 15,
-                          color: "#1e293b",
-                          fontVariantNumeric: "tabular-nums",
-                        }}
-                      >
-                        {formatNumber(group.overallSales)}
-                      </strong>
-                    </div>
-                  </div>
-                </div>
-              </summary>
-
-              <div
-                style={{
-                  padding: 16,
-                  borderTop: "1px solid #e2e8f0",
-                }}
-              >
-                <div style={{ overflowX: "auto" }}>
-                  <div style={{ minWidth: 540 }}>
-                    <SalesTableHeader />
 
                     <div
                       style={{
                         display: "flex",
-                        flexDirection: "column",
-                        gap: 8,
+                        gap: 18,
                       }}
                     >
-                      {group.members.map((member) => (
-                        <SalesTreeNode
-                          key={member.memberCode}
-                          member={member}
-                        />
-                      ))}
+                      <div style={{ textAlign: "right" }}>
+                        <div
+                          style={{
+                            fontSize: 10,
+                            color: "#64748b",
+                          }}
+                        >
+                          Net Sales
+                        </div>
+
+                        <strong
+                          style={{
+                            fontSize: 15,
+                            color: "#1e293b",
+                            fontVariantNumeric: "tabular-nums",
+                          }}
+                        >
+                          {formatNumber(group.netSales)}
+                        </strong>
+                      </div>
+
+                      <div style={{ textAlign: "right" }}>
+                        <div
+                          style={{
+                            fontSize: 10,
+                            color: "#64748b",
+                          }}
+                        >
+                          Overall Sales
+                        </div>
+
+                        <strong
+                          style={{
+                            fontSize: 15,
+                            color: "#1e293b",
+                            fontVariantNumeric: "tabular-nums",
+                          }}
+                        >
+                          {formatNumber(group.overallSales)}
+                        </strong>
+                      </div>
+                    </div>
+                  </div>
+                </summary>
+
+                <div
+                  style={{
+                    padding: 16,
+                    borderTop: "1px solid #e2e8f0",
+                  }}
+                >
+                  <div style={{ overflowX: "auto" }}>
+                    <div style={{ minWidth: 540 }}>
+                      <SalesTableHeader />
+
+                      <div
+                        style={{
+                          display: "flex",
+                          flexDirection: "column",
+                          gap: 8,
+                        }}
+                      >
+                        {group.members.map((member) => (
+                          <SalesTreeNode
+                            key={member.memberCode}
+                            member={member}
+                          />
+                        ))}
+                      </div>
                     </div>
                   </div>
                 </div>
-              </div>
-            </details>
+              </details>
+
+              {/* ID staff rows appear outside the GAM / AM card */}
+              {group.standaloneMembers?.map((member) => (
+                <div
+                  key={member.memberCode}
+                  style={{
+                    overflowX: "auto",
+                  }}
+                >
+                  <div style={{ minWidth: 540 }}>
+                    <MemberSalesRow
+                      member={member}
+                      netSales={member.netSales}
+                      overallSales={member.overallSales}
+                    />
+                  </div>
+                </div>
+              ))}
+            </div>
           ))}
         </div>
       )}
