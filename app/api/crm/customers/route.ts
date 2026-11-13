@@ -150,6 +150,44 @@ function getAddress(raw: RawOrder): string[] {
   );
 }
 
+function sanitiseCallLog(value: unknown): string | null {
+  if (
+    value === null ||
+    value === undefined ||
+    value === ""
+  ) {
+    return null;
+  }
+
+  function clean(item: unknown): unknown {
+    if (Array.isArray(item)) {
+      return item.map(clean);
+    }
+
+    if (item && typeof item === "object") {
+      const output: Record<string, unknown> = {};
+
+      for (const [key, child] of Object.entries(item)) {
+        if (/nric|identity|icnumber|password|token/i.test(key)) {
+          continue;
+        }
+
+        output[key] = clean(child);
+      }
+
+      return output;
+    }
+
+    return item;
+  }
+
+  const safeValue = clean(value);
+
+  return typeof safeValue === "string"
+    ? safeValue
+    : JSON.stringify(safeValue, null, 2);
+}
+
 function getCustomerStatuses(order: {
   net_date: string | null;
   is_paid: boolean | null;
@@ -166,7 +204,7 @@ function getCustomerStatuses(order: {
 
   if (
     order.is_paid === false &&
-    order.status_name === "Active"
+    order.step_name === "Installation Complete"
   ) {
     statuses.push("Incomplete Payment");
   }
@@ -461,6 +499,9 @@ export async function GET() {
           hasAppointment:
             raw.installation?.hasAppointment ?? false,
         },
+
+        // Call Log information from CUCKOO raw order.
+        callLog: sanitiseCallLog(raw.callLog),
       };
     });
 

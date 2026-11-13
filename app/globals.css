@@ -164,6 +164,20 @@ button {
   font-weight: 800;
 }
 
+.avatar-logo {
+  width: 44px;
+  height: 44px;
+  padding: 3px;
+  border-radius: 10px;
+  background: #ffffff;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  overflow: hidden;
+  border: none;
+  flex-shrink: 0;
+}
+
 .dashboard {
   width: min(100% - 40px, 1080px);
   margin: 0 auto;
@@ -4244,4 +4258,24 @@ button {
   color: #25334a;
   font-size: 13px;
   cursor: pointer;
+}
+
+.sales-tree-arrow {
+  display: inline-flex;
+  align-items: center;
+  color: #64748b;
+  font-size: 13px;
+  flex-shrink: 0;
+}
+
+.sales-tree-arrow .arrow-down {
+  display: none;
+}
+
+details[open] > summary .sales-tree-arrow .arrow-right {
+  display: none;
+}
+
+details[open] > summary .sales-tree-arrow .arrow-down {
+  display: inline;
 }

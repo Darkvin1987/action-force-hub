@@ -8,7 +8,7 @@ export default function AppFooter() {
         Core Purpose • Trust &amp; Believe • Focus • Gratitude • Positivity
       </p>
 
-      <small>Prototype v1.0</small>
+      <small>V1.0</small>
     </footer>
   );
 }

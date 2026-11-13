@@ -10,6 +10,12 @@ type SalesSummary = {
   total: number;
   branded: number;
   coCreated: number;
+
+  // Overall Sales figures, calculated using sales_date.
+  overallTotal: number;
+  overallBranded: number;
+  overallCoCreated: number;
+
   monthFrom?: string;
   monthTo?: string;
 };
@@ -235,8 +241,10 @@ export default function SalesClient({
   const teamSync = salesData?.teamSync;
   const salesStatus = salesData?.salesStatus;
 
-  const personalActual = personalSales?.total ?? 0;
-  const teamActual = teamSales?.total ?? 0;
+  // MONTHLY TARGET CALCULATION:
+  // Use Overall Sales (sales_date), NOT NET Sales (net_date).
+  const personalActual = personalSales?.overallTotal ?? 0;
+  const teamActual = teamSales?.overallTotal ?? 0;
 
   const personalTarget = monthlyTargets?.personal ?? 0;
   const teamTarget = monthlyTargets?.team ?? 0;
@@ -250,6 +258,11 @@ export default function SalesClient({
     teamActual,
     teamTarget
   );
+
+  // NET SALES CARD:
+  // Keep NET Sales figures separate from target calculations.
+  const personalNetTotal = personalSales?.total ?? 0;
+  const teamNetTotal = teamSales?.total ?? 0;
 
   const activeMembers = teamSync?.teamMemberCount ?? 0;
   const newRecruits = teamSync?.newRecruitsThisMonth ?? 0;
@@ -370,6 +383,7 @@ export default function SalesClient({
           </label>
         </section>
 
+        {/* Selected period and manual refresh */}
         <div
           style={{
             display: "flex",
@@ -430,14 +444,15 @@ export default function SalesClient({
         {/* Main dashboard cards */}
         <section className="section">
           <div className="dashboard-cards-grid">
-            {/* Monthly Sales Targets */}
+
+            {/* Monthly Sales Targets - based on Overall Sales */}
             <article className="dashboard-info-card">
               <div className="dashboard-card-heading">
                 <div className="stat-icon blue">◎</div>
                 <div>
                   <h3>Monthly Sales Targets</h3>
                   <span className="dashboard-card-subtitle">
-                    Target vs Actual Performance
+                    Overall Sales: Target vs Actual
                   </span>
                 </div>
               </div>
@@ -546,20 +561,20 @@ export default function SalesClient({
               </p>
             </article>
 
-            {/* Net Sales */}
+            {/* NET Sales - based on net_date */}
             <article className="dashboard-info-card">
               <div className="dashboard-card-heading">
                 <div className="stat-icon orange">▥</div>
                 <div>
-                  <h3>Net Sales</h3>
+                  <h3>NET Sales</h3>
                   <span className="dashboard-card-subtitle">
-                    Personal and Team Sales
+                    Sales based on NET Date
                   </span>
                 </div>
               </div>
 
               <div className="net-sales-section">
-                <h4>Personal Sales</h4>
+                <h4>Personal NET Sales</h4>
 
                 <div className="net-sales-row">
                   <span>CUCKOO Branded</span>
@@ -580,17 +595,17 @@ export default function SalesClient({
                 </div>
 
                 <div className="net-sales-total team-net-total">
-                  <span>Personal Total</span>
+                  <span>Personal NET Total</span>
                   <strong>
                     {loading
                       ? "..."
-                      : `${formatUnits(personalActual)} units`}
+                      : `${formatUnits(personalNetTotal)} units`}
                   </strong>
                 </div>
               </div>
 
               <div className="net-sales-section">
-                <h4>Authorised Team Sales</h4>
+                <h4>Authorised Team NET Sales</h4>
 
                 <div className="net-sales-row">
                   <span>CUCKOO Branded</span>
@@ -611,21 +626,22 @@ export default function SalesClient({
                 </div>
 
                 <div className="net-sales-total team-net-total">
-                  <span>Team Total</span>
+                  <span>Team NET Total</span>
                   <strong>
                     {loading
                       ? "..."
-                      : `${formatUnits(teamActual)} units`}
+                      : `${formatUnits(teamNetTotal)} units`}
                   </strong>
                 </div>
               </div>
 
               <p className="sales-period">
-                Period: {year}-{String(month).padStart(2, "0")}-01
+                NET Date Period: {year}-{String(month).padStart(2, "0")}-01
                 {" "}to{" "}
                 {personalSales?.monthTo ?? ""}
               </p>
             </article>
+
           </div>
         </section>
 
