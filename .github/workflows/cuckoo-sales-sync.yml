@@ -5,7 +5,7 @@ on:
   schedule:
     # Every 30 minutes, offset from the top of the hour.
     # GitHub cron uses UTC.
-    - cron: "*/15 0-17,22-23 * * *"
+    - cron: "13,43 0-17,22-23 * * *"
 
   workflow_dispatch:
 
