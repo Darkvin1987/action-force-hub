@@ -1,0 +1,37 @@
+
+name: CUCKOO Sales Historical Sync - Previous 6 Months
+
+on:
+  schedule:
+    # Monday 5:00 AM Malaysia time = Sunday 9:00 PM UTC
+    - cron: "0 21 * * 0"
+  workflow_dispatch:
+
+concurrency:
+  group: cuckoo-sales-historical-6-months
+  cancel-in-progress: false
+
+jobs:
+  sync:
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: npm
+
+      - name: Install dependencies
+        run: npm ci
+
+      - name: Sync previous 6 completed months
+        run: node scripts/sync-cuckoo-sales-6-months.mjs
+        env:
+          SUPABASE_URL: ${{ secrets.SUPABASE_URL }}
+          SUPABASE_SECRET_KEY: ${{ secrets.SUPABASE_SECRET_KEY }}
+          CUCKOO_API_BASE_URL: ${{ secrets.CUCKOO_API_BASE_URL }}
+          CUCKOO_API_APP_NAME: ${{ secrets.CUCKOO_API_APP_NAME }}
+          CUCKOO_API_KEY: ${{ secrets.CUCKOO_API_KEY }}

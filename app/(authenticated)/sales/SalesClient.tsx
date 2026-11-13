@@ -1,6 +1,7 @@
+
 "use client";
 
-import { useEffect, useRef, useState } from "react";
+import { useEffect, useState } from "react";
 import { useRouter } from "next/navigation";
 
 import AppFooter from "@/components/AppFooter";
@@ -9,6 +10,12 @@ type SalesSummary = {
   total: number;
   branded: number;
   coCreated: number;
+
+  // Overall Sales figures, calculated using sales_date.
+  overallTotal: number;
+  overallBranded: number;
+  overallCoCreated: number;
+
   monthFrom?: string;
   monthTo?: string;
 };
@@ -79,6 +86,7 @@ function formatUnits(value: number) {
 
 function getProgress(actual: number, target: number) {
   if (target <= 0) return 0;
+
   return Math.min((actual / target) * 100, 100);
 }
 
@@ -110,22 +118,16 @@ export default function SalesClient({
     useState<SalesApiResponse | null>(null);
 
   const [loading, setLoading] = useState(true);
+  const [refreshing, setRefreshing] = useState(false);
   const [error, setError] = useState("");
-
-  const [syncing, setSyncing] = useState(false);
-  const [syncMessage, setSyncMessage] = useState("");
+  const [refreshMessage, setRefreshMessage] = useState("");
 
   const years = Array.from(
     { length: initialYear - 2025 + 1 },
     (_, index) => 2025 + index
   );
 
-  
-  // Prevent duplicate sync requests for the same month
-  // during React development Strict Mode.
-  const syncStartedFor = useRef(new Set<string>());
-
-  // Load saved Sales Results first, then synchronise separately.
+  // Retrieve the selected period's saved figures from Supabase.
   useEffect(() => {
     const controller = new AbortController();
 
@@ -133,8 +135,8 @@ export default function SalesClient({
       try {
         setLoading(true);
         setError("");
+        setRefreshMessage("");
 
-        // STEP 1: Load saved Supabase figures immediately.
         const response = await fetch(
           `/api/cuckoo/sales?month=${month}&year=${year}`,
           {
@@ -144,7 +146,8 @@ export default function SalesClient({
           }
         );
 
-        const result = await response.json();
+        const result =
+          (await response.json()) as SalesApiResponse;
 
         if (!response.ok || !result.success) {
           throw new Error(
@@ -152,100 +155,9 @@ export default function SalesClient({
           );
         }
 
-        // Display the saved figures without waiting for CUCKOO sync.
-        setSalesData(result);
-        setLoading(false);
-
-        // STEP 2: Only synchronise the current Malaysia month.
-        const nowParts = new Intl.DateTimeFormat("en-CA", {
-          timeZone: "Asia/Kuala_Lumpur",
-          year: "numeric",
-          month: "2-digit",
-        }).formatToParts(new Date());
-
-        const currentYear = Number(
-          nowParts.find((part) => part.type === "year")?.value
-        );
-
-        const currentMonth = Number(
-          nowParts.find((part) => part.type === "month")?.value
-        );
-
-        if (month !== currentMonth || year !== currentYear) {
-          return;
+        if (!controller.signal.aborted) {
+          setSalesData(result);
         }
-
-        const syncKey = `${year}-${String(month).padStart(2, "0")}`;
-
-        if (syncStartedFor.current.has(syncKey)) {
-          return;
-        }
-
-        syncStartedFor.current.add(syncKey);
-
-        console.log(
-          "[SALES DASHBOARD] Starting separate sales synchronisation."
-        );
-
-        try {
-          // This request can take longer, but the dashboard is
-          // already displaying the saved figures.
-          const syncResponse = await fetch(
-            "/api/cuckoo/sales/sync",
-            {
-              method: "POST",
-              cache: "no-store",
-            }
-          );
-
-          const syncResult = await syncResponse.json();
-
-          if (!syncResponse.ok || !syncResult.success) {
-            throw new Error(
-              syncResult.error || "Sales synchronisation failed."
-            );
-          }
-
-          console.log(
-            "[SALES DASHBOARD] Synchronisation completed."
-          );
-
-          // STEP 3: Refresh dashboard figures after sync.
-          if (controller.signal.aborted) {
-            return;
-          }
-
-          const refreshResponse = await fetch(
-            `/api/cuckoo/sales?month=${month}&year=${year}`,
-            {
-              method: "GET",
-              cache: "no-store",
-              signal: controller.signal,
-            }
-          );
-
-          const refreshedResult = await refreshResponse.json();
-
-          if (!refreshResponse.ok || !refreshedResult.success) {
-            throw new Error(
-              refreshedResult.error ||
-                "Unable to refresh sales results."
-            );
-          }
-
-          if (!controller.signal.aborted) {
-            setSalesData(refreshedResult);
-          }
-
-        } catch (syncError) {
-          syncStartedFor.current.delete(syncKey);
-
-          console.error(
-            "[SALES DASHBOARD] Background sync error:",
-            syncError
-          );
-        }
-
       } catch (err) {
         if (err instanceof Error && err.name === "AbortError") {
           return;
@@ -253,12 +165,13 @@ export default function SalesClient({
 
         console.error("Sales Results error:", err);
 
-        setError(
-          err instanceof Error
-            ? err.message
-            : "Unable to load sales results."
-        );
-
+        if (!controller.signal.aborted) {
+          setError(
+            err instanceof Error
+              ? err.message
+              : "Unable to load sales results."
+          );
+        }
       } finally {
         if (!controller.signal.aborted) {
           setLoading(false);
@@ -271,33 +184,17 @@ export default function SalesClient({
     return () => controller.abort();
   }, [month, year]);
 
+  // Refresh only retrieves the latest saved figures from Supabase.
+  // It does not call the CUCKOO API or trigger synchronisation.
   async function handleManualRefresh() {
-    if (syncing || loading) return;
+    if (refreshing || loading) return;
 
-    setSyncing(true);
-    setSyncMessage("");
+    setRefreshing(true);
     setError("");
+    setRefreshMessage("");
 
     try {
-      const response = await fetch("/api/cuckoo/sales/sync", {
-        method: "POST",
-        headers: {
-          "Content-Type": "application/json",
-        },
-        body: JSON.stringify({ force: true }),
-        cache: "no-store",
-      });
-
-      const result = await response.json();
-
-      if (!response.ok) {
-        throw new Error(
-          result.error || "Unable to refresh sales."
-        );
-      }
-
-      // Reload the dashboard figures from Supabase.
-      const refreshResponse = await fetch(
+      const response = await fetch(
         `/api/cuckoo/sales?month=${month}&year=${year}`,
         {
           method: "GET",
@@ -305,45 +202,37 @@ export default function SalesClient({
         }
       );
 
-      const refreshedResult = await refreshResponse.json();
+      const result =
+        (await response.json()) as SalesApiResponse;
 
-      if (!refreshResponse.ok || !refreshedResult.success) {
+      if (!response.ok || !result.success) {
         throw new Error(
-          refreshedResult.error || "Unable to reload sales figures."
+          result.error || "Unable to reload sales figures."
         );
       }
 
-      setSalesData(refreshedResult);
-
-      if (result.failedCount > 0) {
-        setSyncMessage(
-          `Refresh completed with ${result.failedCount} failed member sync(s).`
-        );
-      } else if (result.inProgressCount > 0) {
-        setSyncMessage(
-          "Some members are already synchronising. Please try again shortly."
-        );
-      } else {
-        setSyncMessage(
-          "Sales figures successfully refreshed from CUCKOO."
-        );
-      }
+      setSalesData(result);
+      setRefreshMessage(
+        "Sales figures successfully refreshed from Supabase."
+      );
     } catch (err) {
-      console.error("Manual sales refresh error:", err);
+      console.error("Sales data refresh error:", err);
 
-      setSyncMessage(
+      setError(
         err instanceof Error
           ? err.message
-          : "Unable to refresh sales."
+          : "Unable to refresh sales figures."
       );
     } finally {
-      setSyncing(false);
+      setRefreshing(false);
     }
   }
 
   // Navigate to CRM with the selected Sales Status.
   function openStatusDetails(category: StatusCategory) {
-    router.push(`/crm?status=${encodeURIComponent(category)}`);
+    router.push(
+      `/crm?status=${encodeURIComponent(category)}`
+    );
   }
 
   const personalSales = salesData?.personalSales;
@@ -352,8 +241,10 @@ export default function SalesClient({
   const teamSync = salesData?.teamSync;
   const salesStatus = salesData?.salesStatus;
 
-  const personalActual = personalSales?.total ?? 0;
-  const teamActual = teamSales?.total ?? 0;
+  // MONTHLY TARGET CALCULATION:
+  // Use Overall Sales (sales_date), NOT NET Sales (net_date).
+  const personalActual = personalSales?.overallTotal ?? 0;
+  const teamActual = teamSales?.overallTotal ?? 0;
 
   const personalTarget = monthlyTargets?.personal ?? 0;
   const teamTarget = monthlyTargets?.team ?? 0;
@@ -367,6 +258,11 @@ export default function SalesClient({
     teamActual,
     teamTarget
   );
+
+  // NET SALES CARD:
+  // Keep NET Sales figures separate from target calculations.
+  const personalNetTotal = personalSales?.total ?? 0;
+  const teamNetTotal = teamSales?.total ?? 0;
 
   const activeMembers = teamSync?.teamMemberCount ?? 0;
   const newRecruits = teamSync?.newRecruitsThisMonth ?? 0;
@@ -487,10 +383,7 @@ export default function SalesClient({
           </label>
         </section>
 
-        {/*<div className="sales-period-label">
-          Showing results for {periodLabel}
-        </div>*/}
-
+        {/* Selected period and manual refresh */}
         <div
           style={{
             display: "flex",
@@ -501,49 +394,46 @@ export default function SalesClient({
             marginBottom: 16,
           }}
         >
-        <div className="sales-period-label">
-          Showing results for {periodLabel}
+          <div className="sales-period-label">
+            Showing results for {periodLabel}
+          </div>
+
+          <button
+            type="button"
+            onClick={handleManualRefresh}
+            disabled={refreshing || loading}
+            style={{
+              padding: "10px 16px",
+              background: refreshing ? "#7890b5" : "#234B87",
+              color: "#ffffff",
+              border: "none",
+              borderRadius: 8,
+              fontWeight: 600,
+              cursor:
+                refreshing || loading ? "not-allowed" : "pointer",
+              opacity: refreshing || loading ? 0.75 : 1,
+            }}
+          >
+            {refreshing ? "Refreshing..." : "↻ Refresh Sales"}
+          </button>
         </div>
 
-        <button
-          type="button"
-          onClick={handleManualRefresh}
-          disabled={syncing || loading}
-          style={{
-            padding: "10px 16px",
-            background: syncing ? "#7890b5" : "#234B87",
-            color: "#ffffff",
-            border: "none",
-            borderRadius: 8,
-            fontWeight: 600,
-            cursor: syncing || loading ? "not-allowed" : "pointer",
-            opacity: syncing || loading ? 0.75 : 1,
-          }}
+        {refreshMessage && (
+          <p
+            role="status"
+            aria-live="polite"
+            style={{
+              margin: "0 0 16px",
+              padding: 12,
+              borderRadius: 8,
+              background: "#e8f5e9",
+              color: "#237a38",
+              fontSize: 13,
+            }}
           >
-          {syncing ? "Refreshing Sales..." : "↻ Refresh Sales"}
-        </button>
-    </div>
-
-    {syncMessage && (
-      <p
-        role="status"
-        aria-live="polite"
-        style={{
-          margin: "0 0 16px",
-          padding: 12,
-          borderRadius: 8,
-          background: syncMessage.includes("successfully")
-            ? "#e8f5e9"
-            : "#fff4e5",
-          color: syncMessage.includes("successfully")
-            ? "#237a38"
-            : "#8a5700",
-          fontSize: 13,
-        }}
-      >
-        {syncMessage}
-      </p>
-    )}
+            {refreshMessage}
+          </p>
+        )}
 
         {error && (
           <p className="sales-error" role="alert">
@@ -554,14 +444,15 @@ export default function SalesClient({
         {/* Main dashboard cards */}
         <section className="section">
           <div className="dashboard-cards-grid">
-            {/* Monthly Sales Targets */}
+
+            {/* Monthly Sales Targets - based on Overall Sales */}
             <article className="dashboard-info-card">
               <div className="dashboard-card-heading">
                 <div className="stat-icon blue">◎</div>
                 <div>
                   <h3>Monthly Sales Targets</h3>
                   <span className="dashboard-card-subtitle">
-                    Target vs Actual Performance
+                    Overall Sales: Target vs Actual
                   </span>
                 </div>
               </div>
@@ -670,20 +561,20 @@ export default function SalesClient({
               </p>
             </article>
 
-            {/* Net Sales */}
+            {/* NET Sales - based on net_date */}
             <article className="dashboard-info-card">
               <div className="dashboard-card-heading">
                 <div className="stat-icon orange">▥</div>
                 <div>
-                  <h3>Net Sales</h3>
+                  <h3>NET Sales</h3>
                   <span className="dashboard-card-subtitle">
-                    Personal and Team Sales
+                    Sales based on NET Date
                   </span>
                 </div>
               </div>
 
               <div className="net-sales-section">
-                <h4>Personal Sales</h4>
+                <h4>Personal NET Sales</h4>
 
                 <div className="net-sales-row">
                   <span>CUCKOO Branded</span>
@@ -704,17 +595,17 @@ export default function SalesClient({
                 </div>
 
                 <div className="net-sales-total team-net-total">
-                  <span>Personal Total</span>
+                  <span>Personal NET Total</span>
                   <strong>
                     {loading
                       ? "..."
-                      : `${formatUnits(personalActual)} units`}
+                      : `${formatUnits(personalNetTotal)} units`}
                   </strong>
                 </div>
               </div>
 
               <div className="net-sales-section">
-                <h4>Authorised Team Sales</h4>
+                <h4>Authorised Team NET Sales</h4>
 
                 <div className="net-sales-row">
                   <span>CUCKOO Branded</span>
@@ -735,21 +626,22 @@ export default function SalesClient({
                 </div>
 
                 <div className="net-sales-total team-net-total">
-                  <span>Team Total</span>
+                  <span>Team NET Total</span>
                   <strong>
                     {loading
                       ? "..."
-                      : `${formatUnits(teamActual)} units`}
+                      : `${formatUnits(teamNetTotal)} units`}
                   </strong>
                 </div>
               </div>
 
               <p className="sales-period">
-                Period: {year}-{String(month).padStart(2, "0")}-01
+                NET Date Period: {year}-{String(month).padStart(2, "0")}-01
                 {" "}to{" "}
                 {personalSales?.monthTo ?? ""}
               </p>
             </article>
+
           </div>
         </section>
 

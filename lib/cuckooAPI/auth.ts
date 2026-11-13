@@ -1,4 +1,6 @@
 
+import { env } from "cloudflare:workers";
+
 let cachedToken: string | null = null;
 let tokenExpiresAt = 0;
 let tokenRequest: Promise<string> | null = null;
@@ -40,9 +42,9 @@ export async function getCuckooAccessToken(): Promise<string> {
   }
 
   tokenRequest = (async () => {
-    const baseUrl = process.env.CUCKOO_API_BASE_URL;
-    const apiAppName = process.env.CUCKOO_API_APP_NAME;
-    const apiKey = process.env.CUCKOO_API_KEY;
+    const baseUrl = env.CUCKOO_API_BASE_URL;
+    const apiAppName = env.CUCKOO_API_APP_NAME;
+    const apiKey = env.CUCKOO_API_KEY;
 
     if (!baseUrl || !apiAppName || !apiKey) {
       throw new Error("CUCKOO API configuration missing");
@@ -84,9 +86,7 @@ export async function getCuckooAccessToken(): Promise<string> {
     }
 
     if (result.result !== "1" || !result.data?.accessToken) {
-      throw new Error(
-        result.message || "Authentication failed"
-      );
+      throw new Error(result.message || "Authentication failed");
     }
 
     const token = result.data.accessToken as string;

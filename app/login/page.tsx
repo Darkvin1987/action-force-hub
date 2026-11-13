@@ -2,6 +2,7 @@
 "use client";
 
 import { useState, Suspense } from "react";
+import Link from "next/link";
 import { useSearchParams } from "next/navigation";
 
 function LoginForm() {
@@ -13,7 +14,9 @@ function LoginForm() {
   const [errorMessage, setErrorMessage] = useState("");
   const [loading, setLoading] = useState(false);
 
-  async function handleLogin(event: React.FormEvent<HTMLFormElement>) {
+  async function handleLogin(
+    event: React.FormEvent<HTMLFormElement>
+  ) {
     event.preventDefault();
     setErrorMessage("");
     setLoading(true);
@@ -39,11 +42,17 @@ function LoginForm() {
         }),
       });
 
-      const result = await response.json();
+      const result = (await response.json()) as {
+        ok?: boolean;
+        error?: string;
+        message?: string;
+      };
 
       if (!response.ok) {
         setErrorMessage(
-          result.error || "Login failed. Please try again."
+          result.message ||
+            result.error ||
+            "Login failed. Please try again."
         );
         return;
       }
@@ -56,7 +65,9 @@ function LoginForm() {
       window.location.href = destination;
 
     } catch {
-      setErrorMessage("Something went wrong. Please try again.");
+      setErrorMessage(
+        "Something went wrong. Please try again."
+      );
     } finally {
       setLoading(false);
     }
@@ -65,30 +76,40 @@ function LoginForm() {
   return (
     <main className="login-page">
       <section className="login-card">
-        <div className="login-brand">ACTION FORCE</div>
+
+        <div className="login-brand">
+          ACTION FORCE
+        </div>
 
         <h1>Action Force Hub</h1>
 
         <p className="login-subtitle">
-          Sign in using your Member Code and password.
+          Sign in using your ASPE Code and password.
         </p>
 
         <form onSubmit={handleLogin}>
-          <label htmlFor="memberCode">Member Code</label>
+
+          <label htmlFor="memberCode">
+            ASPE Code
+          </label>
 
           <input
             id="memberCode"
             type="text"
             autoComplete="username"
-            placeholder="Enter your Member Code"
+            placeholder="Enter your ASPE Code"
             value={memberCode}
-            onChange={(event) => setMemberCode(event.target.value)}
+            onChange={(event) =>
+              setMemberCode(event.target.value)
+            }
             minLength={3}
             maxLength={40}
             required
           />
 
-          <label htmlFor="password">Password</label>
+          <label htmlFor="password">
+            Password
+          </label>
 
           <input
             id="password"
@@ -96,25 +117,58 @@ function LoginForm() {
             autoComplete="current-password"
             placeholder="Enter your password"
             value={password}
-            onChange={(event) => setPassword(event.target.value)}
+            onChange={(event) =>
+              setPassword(event.target.value)
+            }
             required
           />
 
+          {/* Forgot Password Link */}
+          <div
+            style={{
+              display: "flex",
+              justifyContent: "flex-end",
+              marginTop: 8,
+              marginBottom: 18,
+            }}
+          >
+            <Link
+              href="/forgot-password"
+              style={{
+                color: "#24518D",
+                fontSize: 13,
+                fontWeight: 600,
+                textDecoration: "none",
+                cursor: "pointer",
+              }}
+            >
+              Forgot Password?
+            </Link>
+          </div>
+
           {errorMessage && (
-            <p className="login-error" role="alert">
+            <p
+              className="login-error"
+              role="alert"
+            >
               {errorMessage}
             </p>
           )}
 
-          <button type="submit" disabled={loading}>
+          {/* Normal Sign In Button */}
+          <button
+            type="submit"
+            disabled={loading}
+          >
             {loading ? "Signing in..." : "Sign In"}
           </button>
+
         </form>
 
         <p className="login-footer">
-          Authorized Action Force members only. Contact your
-          administrator if you need an account or password reset.
+          Authorized Action Force members only.
         </p>
+
       </section>
     </main>
   );
@@ -122,7 +176,9 @@ function LoginForm() {
 
 export default function LoginPage() {
   return (
-    <Suspense fallback={<div>Loading login page...</div>}>
+    <Suspense
+      fallback={<div>Loading login page...</div>}
+    >
       <LoginForm />
     </Suspense>
   );

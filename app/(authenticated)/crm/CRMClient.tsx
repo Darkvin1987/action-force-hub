@@ -36,6 +36,7 @@ type Customer = {
     resultRemark: string;
     hasAppointment: boolean;
   };
+  callLog: string | null;
 };
 
 type StatusOption = {
@@ -721,6 +722,34 @@ export default function CRMClient() {
                     </strong>
                   </div>
                 </div>
+              </div>
+              {/* Call Log */}
+              <div className="crm-detail-section">
+                <h3>Call Log</h3>
+
+                {selected.callLog ? (
+                  <div
+                    className="crm-call-log"
+                    style={{
+                      whiteSpace: "pre-wrap",
+                      overflowWrap: "anywhere",
+                      background: "var(--crm-card, #f8fafc)",
+                      border: "1px solid var(--crm-border, #e5e7eb)",
+                      borderRadius: "10px",
+                      padding: "16px",
+                      fontSize: "13px",
+                      lineHeight: "1.7",
+                      maxHeight: "400px",
+                      overflowY: "auto",
+                    }}
+                  >
+                    {selected.callLog}
+                  </div>
+                ) : (
+                  <p className="crm-muted">
+                    No call log information available for this customer.
+                  </p>
+                )}
               </div>
             </section>
           </div>

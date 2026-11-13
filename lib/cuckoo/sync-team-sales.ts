@@ -4,10 +4,9 @@ import { syncCuckooSales } from "@/lib/cuckoo/sync-sales";
 import { getMalaysiaMonthRange } from "@/lib/cuckoo/personal-sales";
 
 const FRESHNESS_MINUTES = 15;
-const MEMBER_CONCURRENCY = 2;
 const IN_PROGRESS_TIMEOUT_MINUTES = 10;
 
-type StaffProfile = {
+export type StaffProfile = {
   id: string;
   member_code: string;
   role: string;
@@ -78,6 +77,9 @@ export async function getAuthorisedTeamMembers(
   const team = getAuthorisedTeam(manager, allStaff ?? []);
   const { from, toExclusive } = getMalaysiaMonthRange();
 
+  const monthStart = new Date(`${from}T00:00:00+08:00`);
+  const monthEnd = new Date(`${toExclusive}T00:00:00+08:00`);
+
   const newRecruitsThisMonth = team.filter((member) => {
     if (!member.created_at) return false;
 
@@ -85,8 +87,8 @@ export async function getAuthorisedTeamMembers(
 
     return (
       !Number.isNaN(createdAt.getTime()) &&
-      createdAt >= new Date(`${from}T00:00:00+08:00`) &&
-      createdAt < new Date(`${toExclusive}T00:00:00+08:00`)
+      createdAt >= monthStart &&
+      createdAt < monthEnd
     );
   }).length;
 
@@ -115,8 +117,6 @@ export async function syncMemberIfStale(
     );
   }
 
-  // Do not start a duplicate sync if another request is
-  // already synchronising this member.
   const lastUpdatedAt = status?.updated_at
     ? new Date(status.updated_at).getTime()
     : 0;
@@ -129,7 +129,7 @@ export async function syncMemberIfStale(
   if (isCurrentlySyncing) {
     return {
       memberCode,
-      status: "IN_PROGRESS",
+      status: "IN_PROGRESS" as const,
       message: "A synchronisation is already running.",
     };
   }
@@ -146,7 +146,7 @@ export async function syncMemberIfStale(
   if (!force && isFresh) {
     return {
       memberCode,
-      status: "SKIPPED",
+      status: "SKIPPED" as const,
       message: "Recent successful sync.",
     };
   }
@@ -196,14 +196,14 @@ export async function syncMemberIfStale(
 
     return {
       memberCode,
-      status: "SUCCESS",
+      status: "SUCCESS" as const,
       synced: result.synced,
     };
   } catch (error) {
     const message =
       error instanceof Error ? error.message : "Unknown sync error";
 
-    await supabase
+    const { error: failureUpdateError } = await supabase
       .from("cuckoo_sales_sync_status")
       .upsert(
         {
@@ -215,64 +215,17 @@ export async function syncMemberIfStale(
         { onConflict: "member_code" }
       );
 
+    if (failureUpdateError) {
+      console.error(
+        `Unable to record failed sync for ${memberCode}:`,
+        failureUpdateError.message
+      );
+    }
+
     return {
       memberCode,
-      status: "FAILED",
+      status: "FAILED" as const,
       message,
     };
   }
-}
-
-async function runWithConcurrency<T, R>(
-  items: T[],
-  limit: number,
-  worker: (item: T) => Promise<R>
-): Promise<R[]> {
-  const results: R[] = new Array(items.length);
-  let nextIndex = 0;
-
-  async function runWorker() {
-    while (true) {
-      const index = nextIndex++;
-
-      if (index >= items.length) return;
-
-      results[index] = await worker(items[index]);
-    }
-  }
-
-  await Promise.all(
-    Array.from(
-      { length: Math.min(limit, items.length) },
-      () => runWorker()
-    )
-  );
-
-  return results;
-}
-
-export async function syncAuthorisedTeamSales(
-  supabase: SupabaseClient,
-  manager: StaffProfile,
-  force = false
-) {
-  const teamInfo = await getAuthorisedTeamMembers(supabase, manager);
-
-  const results = await runWithConcurrency(
-    teamInfo.team,
-    MEMBER_CONCURRENCY,
-    (member) =>
-      syncMemberIfStale(
-        supabase,
-        member.member_code,
-        force
-      )
-  );
-
-  return {
-    teamMemberCount: teamInfo.teamMemberCount,
-    newRecruitsThisMonth: teamInfo.newRecruitsThisMonth,
-    teamMemberCodes: teamInfo.teamMemberCodes,
-    results,
-  };
 }

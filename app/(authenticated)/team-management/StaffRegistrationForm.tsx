@@ -1,4 +1,3 @@
-
 "use client";
 
 import { useEffect, useState } from "react";
@@ -23,6 +22,7 @@ export default function StaffRegistrationForm() {
   const [staff, setStaff] = useState<Staff[]>([]);
   const [staffId, setStaffId] = useState("");
   const [fullName, setFullName] = useState("");
+  const [phoneNumber, setPhoneNumber] = useState("");
   const [role, setRole] = useState<StaffRole>("GAM");
   const [organization, setOrganization] =
     useState<OrganizationType>("ACTION_FORCE");
@@ -32,7 +32,10 @@ export default function StaffRegistrationForm() {
 
   async function loadStaff() {
     const response = await fetch("/api/staff-management");
-    const result = await response.json();
+    const result = (await response.json()) as {
+      staff?: Staff[];
+      error?: string;
+    };
 
     if (response.ok) {
       setStaff(result.staff ?? []);
@@ -92,6 +95,15 @@ export default function StaffRegistrationForm() {
       return;
     }
 
+    const normalizedPhone = phoneNumber.trim();
+
+    if (!/^\+[1-9]\d{7,14}$/.test(normalizedPhone)) {
+      setMessage(
+        "Please enter a valid phone number in international format, e.g. +60123456789."
+      );
+      return;
+    }
+
     setLoading(true);
 
     try {
@@ -101,13 +113,17 @@ export default function StaffRegistrationForm() {
         body: JSON.stringify({
           member_code: staffId.trim().toUpperCase(),
           full_name: fullName.trim(),
+          phone_number: normalizedPhone,
           role,
           organization_type: organization,
           manager_id: managerId,
         }),
       });
 
-      const result = await response.json();
+      const result = (await response.json()) as {
+        message?: string;
+        error?: string;
+      };
 
       if (!response.ok) {
         setMessage(result.error ?? "Unable to create staff profile.");
@@ -118,6 +134,7 @@ export default function StaffRegistrationForm() {
 
       setStaffId("");
       setFullName("");
+      setPhoneNumber("");
       setRole("GAM");
       setOrganization("ACTION_FORCE");
       setManagerId("");
@@ -191,6 +208,24 @@ export default function StaffRegistrationForm() {
             placeholder="Enter full name"
             style={inputStyle}
           />
+        </label>
+
+        <label>
+          Registered Mobile Number
+          <input
+            required
+            type="tel"
+            maxLength={16}
+            value={phoneNumber}
+            onChange={(e) => setPhoneNumber(e.target.value)}
+            placeholder="+60123456789"
+            style={inputStyle}
+          />
+          <small style={{ color: "#666" }}>
+            Enter the number in international format, without spaces
+            or hyphens. This will be the staff member&apos;s initial
+            login password.
+          </small>
         </label>
 
         <label>

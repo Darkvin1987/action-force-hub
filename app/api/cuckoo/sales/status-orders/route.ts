@@ -56,7 +56,7 @@ type RawOrder = {
 
 const allowedRoles: Record<string, string[]> = {
   DIRECTOR: ["GAM", "ID"],
-  GAM: ["AM"],
+  GAM: ["AM", "SC", "ID"],
   AM: ["SC"],
   SC: [],
   ID: [],
