@@ -326,7 +326,7 @@ export default function SalesClient({
       icon: "▤",
     },
     {
-      title: "Pending Payment",
+      title: "Pending Payment / Pending Deduction",
       category: "pendingPayment",
       count: salesStatus?.pendingPayment ?? 0,
       color: "pending-payment",

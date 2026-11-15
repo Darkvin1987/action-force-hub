@@ -51,7 +51,7 @@ function isAM(member: SalesNode) {
 }
 
 // Shared column headings.
-// Used by both GAM and expanded AM sections.
+// Used by GAM and expanded AM sections.
 function SalesTableHeader() {
   return (
     <div
@@ -159,6 +159,109 @@ function MemberSalesRow({
       >
         {formatNumber(overallSales)}
       </span>
+    </div>
+  );
+}
+
+// Standalone ID row.
+// Displays Net Sales and Overall Sales labels
+// directly above their individual figures, like GAM.
+function StandaloneMemberSalesRow({
+  member,
+}: {
+  member: SalesNode;
+}) {
+  return (
+    <div
+      style={{
+        display: "grid",
+        gridTemplateColumns:
+          "minmax(120px, 0.9fr) minmax(150px, 1.5fr) minmax(85px, 0.7fr) minmax(100px, 0.8fr)",
+        gap: 12,
+        alignItems: "center",
+        padding: "12px 14px",
+        background: "#f8fafc",
+        border: "1px solid #e5e7eb",
+        borderRadius: 8,
+      }}
+    >
+      <span
+        style={{
+          fontSize: 12,
+          color: "#64748b",
+          fontWeight: 600,
+        }}
+      >
+        {member.memberCode}
+      </span>
+
+      <div style={{ minWidth: 0 }}>
+        <div
+          style={{
+            fontSize: 13,
+            fontWeight: 700,
+            color: "#1e293b",
+          }}
+        >
+          {member.name}
+        </div>
+
+        <div
+          style={{
+            fontSize: 11,
+            color: "#64748b",
+            marginTop: 3,
+          }}
+        >
+          {member.role}
+        </div>
+      </div>
+
+      {/* ID individual Net Sales */}
+      <div style={{ textAlign: "right" }}>
+        <div
+          style={{
+            fontSize: 10,
+            color: "#64748b",
+            marginBottom: 3,
+          }}
+        >
+          Net Sales
+        </div>
+
+        <strong
+          style={{
+            fontSize: 15,
+            color: "#1e293b",
+            fontVariantNumeric: "tabular-nums",
+          }}
+        >
+          {formatNumber(member.netSales)}
+        </strong>
+      </div>
+
+      {/* ID individual Overall Sales */}
+      <div style={{ textAlign: "right" }}>
+        <div
+          style={{
+            fontSize: 10,
+            color: "#64748b",
+            marginBottom: 3,
+          }}
+        >
+          Overall Sales
+        </div>
+
+        <strong
+          style={{
+            fontSize: 15,
+            color: "#1e293b",
+            fontVariantNumeric: "tabular-nums",
+          }}
+        >
+          {formatNumber(member.overallSales)}
+        </strong>
+      </div>
     </div>
   );
 }
@@ -279,12 +382,8 @@ function SalesTreeNode({
           </summary>
 
           {memberIsAM ? (
-            // AM expansion uses the same table layout
-            // as the GAM expansion.
             <AMExpandedTable member={member} />
           ) : (
-            // GAM and other expandable members
-            // continue displaying their children.
             <div
               style={{
                 marginTop: 8,
@@ -599,10 +698,8 @@ export default function TeamSalesBreakdown({
                   }}
                 >
                   <div style={{ minWidth: 540 }}>
-                    <MemberSalesRow
+                    <StandaloneMemberSalesRow
                       member={member}
-                      netSales={member.netSales}
-                      overallSales={member.overallSales}
                     />
                   </div>
                 </div>

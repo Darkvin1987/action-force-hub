@@ -30,6 +30,7 @@ type RawOrder = {
   rentalScheme?: string;
   contractMonths?: number;
   obligationPeriodMonths?: number;
+  psi_unit_count?: number | null;
   installation?: {
     address?: {
       line1?: string;
@@ -71,6 +72,7 @@ type SalesOrder = {
   step_name: string | null;
   status_name: string | null;
   is_paid: boolean | null;
+  psi_unit_count: number | null;
   amount: number | null;
   raw_order: unknown;
 };
@@ -83,7 +85,10 @@ const STATUS_CATEGORIES: StatusCategory[] = [
   { key: "pendingRiskAssessment", label: "Pending Risk Assessment" },
   { key: "pendingDocumentVerifying", label: "Pending Doc. Verifying" },
   { key: "pendingDocumentSubmission", label: "Pending Doc. Submission" },
-  { key: "pendingPayment", label: "Pending Payment" },
+  {
+    key: "pendingPayment",
+    label: "Pending Payment / Pending Deduction",
+  },
 ];
 
 const allowedRoles: Record<string, string[]> = {
@@ -205,7 +210,7 @@ function sanitiseCallLog(value: unknown): string | null {
 function getCustomerStatuses(order: {
   sales_no: string;
   net_date: string | null;
-  is_paid: boolean | null;
+  psi_unit_count: number | null;
   status_name: string | null;
   step_name: string | null;
 }): string[] {
@@ -218,9 +223,11 @@ function getCustomerStatuses(order: {
     statuses.push("NET Sales");
   }
 
+  // Incomplete Payment:
+  // psi_unit_count must be null and step must be Installation Complete.
   if (
     !excluded &&
-    order.is_paid === false &&
+    order.psi_unit_count === null &&
     order.step_name === "Installation Complete"
   ) {
     statuses.push("Incomplete Payment");
@@ -250,8 +257,16 @@ function getCustomerStatuses(order: {
     statuses.push("Pending Doc. Submission");
   }
 
-  if (order.step_name === "Pending Payment") {
-    statuses.push("Pending Payment");
+  // Combine Pending Payment and all Pending Deduction stages.
+  const pendingPaymentStages = [
+    "Pending Payment",
+    "Pending Deduction Result",
+    "Pending Deduction Submission",
+    "Pending Re-Attempt Deduction",
+  ];
+
+  if (pendingPaymentStages.includes(order.step_name ?? "")) {
+    statuses.push("Pending Payment / Pending Deduction");
   }
 
   return statuses;
@@ -365,7 +380,7 @@ export async function GET() {
       const { data, error } = await admin
         .from("cuckoo_sales_orders")
         .select(
-          "sales_no, member_code, brand, sales_date, net_date, step_name, status_name, is_paid, amount, raw_order"
+          "sales_no, member_code, brand, sales_date, net_date, step_name, status_name, is_paid, psi_unit_count, amount, raw_order"
         )
         .in("member_code", memberCodes)
         .order("sales_date", { ascending: false })
@@ -545,8 +560,11 @@ export async function GET() {
         customer.customerStatuses.includes("Pending Doc. Submission")
       ).length,
 
+      // Combined count for Pending Payment and Pending Deduction.
       pendingPayment: customers.filter((customer) =>
-        customer.customerStatuses.includes("Pending Payment")
+        customer.customerStatuses.includes(
+          "Pending Payment / Pending Deduction"
+        )
       ).length,
     };
 
