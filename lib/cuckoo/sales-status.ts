@@ -110,13 +110,13 @@ export async function getSalesStatusCounts(
     countOrders((q) =>
       q.eq(
         "step_name",
-        "Pending Risk Assessment / Doc. Verification"
+        "Pending Risk Assessment"
       )
     ),
 
     // Pending Sales Info
     countOrders((q) =>
-      q.eq("step_name", "Pending Sales Info")
+      q.eq("step_name", "Pending Document Verifying")
     ),
 
     // Pending Document Submission
