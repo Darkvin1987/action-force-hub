@@ -89,8 +89,8 @@ function getStatusClass(status: string) {
     case "Call Log Stage":
       return "crm-status-new";
 
-    case "Pending Risk Assessment / Doc. Verification":
-    case "Pending Sales Info":
+    case "Pending Risk Assessment":
+    case "Pending Doc. Verifying":
     case "Pending Doc. Submission":
       return "crm-status-follow";
 
@@ -707,7 +707,7 @@ export default function CRMClient() {
                   </div>
 
                   <div className="crm-profile-full">
-                    <span>Installation Remark</span>
+                    <span>Call Log Remark</span>
                     <strong>
                       {selected.installation.remark ||
                         "Not available"}
@@ -724,7 +724,7 @@ export default function CRMClient() {
                 </div>
               </div>
               {/* Call Log */}
-              <div className="crm-detail-section">
+              {/*<div className="crm-detail-section">
                 <h3>Call Log</h3>
 
                 {selected.callLog ? (
@@ -750,7 +750,7 @@ export default function CRMClient() {
                     No call log information available for this customer.
                   </p>
                 )}
-              </div>
+              </div>*/}
             </section>
           </div>
         )}

@@ -80,8 +80,7 @@ export async function GET(request: Request) {
     }
 
     // 2. Read the selected period.
-    // The main Dashboard does not send a month or year,
-    // so it will automatically use the current Malaysia month.
+    // If no month or year is supplied, use the current Malaysia month.
     const { searchParams } = new URL(request.url);
 
     const monthParam = searchParams.get("month");
@@ -119,13 +118,22 @@ export async function GET(request: Request) {
     const admin = createAdminClient();
 
     // 4. Retrieve the authorised reporting team.
-    const teamInfo = await getAuthorisedTeamMembers(admin, {
-      id: staff.id,
-      member_code: staff.member_code,
-      role: staff.role,
-      manager_id: staff.manager_id,
-      created_at: null,
-    });
+    // IMPORTANT: Pass the selected month and year so recruitment
+    // figures follow the period selected on the Sales Results page.
+    const teamInfo = await getAuthorisedTeamMembers(
+      admin,
+      {
+        id: staff.id,
+        member_code: staff.member_code,
+        role: staff.role,
+        manager_id: staff.manager_id,
+        created_at: null,
+      },
+      {
+        month,
+        year,
+      }
+    );
 
     // 5. Retrieve personal and team sales figures.
     const [

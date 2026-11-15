@@ -62,20 +62,27 @@ type StatusCategory = {
   label: string;
 };
 
+type SalesOrder = {
+  sales_no: string;
+  member_code: string;
+  brand: string | null;
+  sales_date: string | null;
+  net_date: string | null;
+  step_name: string | null;
+  status_name: string | null;
+  is_paid: boolean | null;
+  amount: number | null;
+  raw_order: unknown;
+};
+
 const STATUS_CATEGORIES: StatusCategory[] = [
   { key: "netSales", label: "NET Sales" },
   { key: "incompletePayment", label: "Incomplete Payment" },
   { key: "installationStage", label: "Installation Stage" },
   { key: "callLogStage", label: "Call Log Stage" },
-  {
-    key: "pendingRiskAssessment",
-    label: "Pending Risk Assessment / Doc. Verification",
-  },
-  { key: "pendingSalesInfo", label: "Pending Sales Info" },
-  {
-    key: "pendingDocumentSubmission",
-    label: "Pending Doc. Submission",
-  },
+  { key: "pendingRiskAssessment", label: "Pending Risk Assessment" },
+  { key: "pendingDocumentVerifying", label: "Pending Doc. Verifying" },
+  { key: "pendingDocumentSubmission", label: "Pending Doc. Submission" },
   { key: "pendingPayment", label: "Pending Payment" },
 ];
 
@@ -86,6 +93,13 @@ const allowedRoles: Record<string, string[]> = {
   SC: [],
   ID: [],
 };
+
+// Exclude sales order numbers containing C1, C2 or G1.
+function isExcludedSalesOrder(
+  salesNo: string | null | undefined
+): boolean {
+  return /C1|C2|G1/i.test(salesNo ?? "");
+}
 
 function getAuthorisedTeam(
   currentStaff: StaffRecord,
@@ -189,6 +203,7 @@ function sanitiseCallLog(value: unknown): string | null {
 }
 
 function getCustomerStatuses(order: {
+  sales_no: string;
   net_date: string | null;
   is_paid: boolean | null;
   status_name: string | null;
@@ -196,38 +211,39 @@ function getCustomerStatuses(order: {
 }): string[] {
   const statuses: string[] = [];
 
-  // Same conditions as lib/cuckoo/sales-status.ts.
+  const excluded = isExcludedSalesOrder(order.sales_no);
 
-  if (order.net_date !== null) {
+  // C1, C2 and G1 are excluded from these three categories.
+  if (!excluded && order.net_date !== null) {
     statuses.push("NET Sales");
   }
 
   if (
+    !excluded &&
     order.is_paid === false &&
     order.step_name === "Installation Complete"
   ) {
     statuses.push("Incomplete Payment");
   }
 
-  if (order.step_name === "Installation Stage") {
+  if (
+    !excluded &&
+    order.step_name === "Installation Stage"
+  ) {
     statuses.push("Installation Stage");
   }
 
+  // Other CRM categories remain unchanged.
   if (order.step_name === "Call-Log Stage") {
     statuses.push("Call Log Stage");
   }
 
-  if (
-    order.step_name ===
-    "Pending Risk Assessment / Doc. Verification"
-  ) {
-    statuses.push(
-      "Pending Risk Assessment / Doc. Verification"
-    );
+  if (order.step_name === "Pending Risk Assessment") {
+    statuses.push("Pending Risk Assessment");
   }
 
-  if (order.step_name === "Pending Sales Info") {
-    statuses.push("Pending Sales Info");
+  if (order.step_name === "Pending Document Verifying") {
+    statuses.push("Pending Doc. Verifying");
   }
 
   if (order.step_name === "Pending Document Submission") {
@@ -322,7 +338,7 @@ export async function GET() {
       installationStage: 0,
       callLogStage: 0,
       pendingRiskAssessment: 0,
-      pendingSalesInfo: 0,
+      pendingDocumentVerifying: 0,
       pendingDocumentSubmission: 0,
       pendingPayment: 0,
     };
@@ -343,18 +359,7 @@ export async function GET() {
     const pageSize = 1000;
     let offset = 0;
 
-    const salesOrders: Array<{
-      sales_no: string;
-      member_code: string;
-      brand: string | null;
-      sales_date: string | null;
-      net_date: string | null;
-      step_name: string | null;
-      status_name: string | null;
-      is_paid: boolean | null;
-      amount: number | null;
-      raw_order: unknown;
-    }> = [];
+    const salesOrders: SalesOrder[] = [];
 
     while (true) {
       const { data, error } = await admin
@@ -373,7 +378,7 @@ export async function GET() {
         );
       }
 
-      const rows = data ?? [];
+      const rows = (data ?? []) as SalesOrder[];
 
       salesOrders.push(...rows);
 
@@ -404,7 +409,7 @@ export async function GET() {
     );
 
     // 7. Convert stored sales orders into CRM records.
-    const customers = salesOrders.map((order) => {
+    const customers = uniqueSalesOrders.map((order) => {
       const raw = getRawOrder(order.raw_order);
 
       const contact = raw.installation?.serviceContact;
@@ -528,12 +533,12 @@ export async function GET() {
 
       pendingRiskAssessment: customers.filter((customer) =>
         customer.customerStatuses.includes(
-          "Pending Risk Assessment / Doc. Verification"
+          "Pending Risk Assessment"
         )
       ).length,
 
-      pendingSalesInfo: customers.filter((customer) =>
-        customer.customerStatuses.includes("Pending Sales Info")
+      pendingDocumentVerifying: customers.filter((customer) =>
+        customer.customerStatuses.includes("Pending Doc. Verifying")
       ).length,
 
       pendingDocumentSubmission: customers.filter((customer) =>

@@ -1,7 +1,7 @@
 
 import type { SupabaseClient } from "@supabase/supabase-js";
+
 import { syncCuckooSales } from "@/lib/cuckoo/sync-sales";
-import { getMalaysiaMonthRange } from "@/lib/cuckoo/personal-sales";
 
 const FRESHNESS_MINUTES = 15;
 const IN_PROGRESS_TIMEOUT_MINUTES = 10;
@@ -22,6 +22,19 @@ const ALLOWED_CHILD_ROLES: Record<string, string[]> = {
   ID: [],
 };
 
+function getCurrentMalaysiaPeriod() {
+  const parts = new Intl.DateTimeFormat("en-CA", {
+    timeZone: "Asia/Kuala_Lumpur",
+    year: "numeric",
+    month: "2-digit",
+  }).formatToParts(new Date());
+
+  return {
+    year: Number(parts.find((part) => part.type === "year")?.value),
+    month: Number(parts.find((part) => part.type === "month")?.value),
+  };
+}
+
 function getAuthorisedTeam(
   manager: StaffProfile,
   allStaff: StaffProfile[]
@@ -32,6 +45,7 @@ function getAuthorisedTeam(
     if (!staff.manager_id) continue;
 
     const children = childrenByManager.get(staff.manager_id) ?? [];
+
     children.push(staff);
     childrenByManager.set(staff.manager_id, children);
   }
@@ -61,7 +75,11 @@ function getAuthorisedTeam(
 
 export async function getAuthorisedTeamMembers(
   supabase: SupabaseClient,
-  manager: StaffProfile
+  manager: StaffProfile,
+  selectedPeriod?: {
+    month: number;
+    year: number;
+  }
 ) {
   const { data: allStaff, error } = await supabase
     .from("staff_profiles")
@@ -75,11 +93,35 @@ export async function getAuthorisedTeamMembers(
   }
 
   const team = getAuthorisedTeam(manager, allStaff ?? []);
-  const { from, toExclusive } = getMalaysiaMonthRange();
 
-  const monthStart = new Date(`${from}T00:00:00+08:00`);
-  const monthEnd = new Date(`${toExclusive}T00:00:00+08:00`);
+  // Use the selected month and year when supplied.
+  // Otherwise, use the current Malaysia month.
+  const period = selectedPeriod ?? getCurrentMalaysiaPeriod();
 
+  const monthStartString =
+    `${period.year}-${String(period.month).padStart(2, "0")}-01`;
+
+  const nextMonth = new Date(
+    Date.UTC(period.year, period.month, 1)
+  );
+
+  const nextMonthStartString = [
+    nextMonth.getUTCFullYear(),
+    String(nextMonth.getUTCMonth() + 1).padStart(2, "0"),
+    "01",
+  ].join("-");
+
+  // Convert Malaysia month boundaries to timestamps.
+  const monthStart = new Date(
+    `${monthStartString}T00:00:00+08:00`
+  );
+
+  const monthEnd = new Date(
+    `${nextMonthStartString}T00:00:00+08:00`
+  );
+
+  // Count team members whose profiles were created
+  // within the selected Malaysia calendar month.
   const newRecruitsThisMonth = team.filter((member) => {
     if (!member.created_at) return false;
 
@@ -93,9 +135,14 @@ export async function getAuthorisedTeamMembers(
   }).length;
 
   return {
+    // This remains the current active authorised team headcount.
     teamMemberCount: team.length,
+
+    // This now follows the selected month and year.
     newRecruitsThisMonth,
+
     teamMemberCodes: team.map((member) => member.member_code),
+
     team,
   };
 }

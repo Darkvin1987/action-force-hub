@@ -8,7 +8,7 @@ export type SalesStatusCounts = {
   installationStage: number;
   callLogStage: number;
   pendingRiskAssessment: number;
-  pendingSalesInfo: number;
+  pendingDocumentVerifying: number;
   pendingDocumentSubmission: number;
   pendingPayment: number;
   monthFrom: string;
@@ -30,7 +30,7 @@ export async function getSalesStatusCounts(
     installationStage: 0,
     callLogStage: 0,
     pendingRiskAssessment: 0,
-    pendingSalesInfo: 0,
+    pendingDocumentVerifying: 0,
     pendingDocumentSubmission: 0,
     pendingPayment: 0,
     monthFrom: from,
@@ -71,7 +71,7 @@ export async function getSalesStatusCounts(
     installationStage,
     callLogStage,
     pendingRiskAssessment,
-    pendingSalesInfo,
+    pendingDocumentVerifying,
     pendingDocumentSubmission,
     pendingPayment,
   ] = await Promise.all([
@@ -92,10 +92,10 @@ export async function getSalesStatusCounts(
       q.eq("step_name", "Call-Log Stage")
     ),
     countOrders((q) =>
-      q.eq("step_name", "Pending Risk Assessment / Doc. Verification")
+      q.eq("step_name", "Pending Risk Assessment")
     ),
     countOrders((q) =>
-      q.eq("step_name", "Pending Sales Info")
+      q.eq("step_name", "Pending Document Verifying")
     ),
     countOrders((q) =>
       q.eq("step_name", "Pending Document Submission")
@@ -111,7 +111,7 @@ export async function getSalesStatusCounts(
     installationStage,
     callLogStage,
     pendingRiskAssessment,
-    pendingSalesInfo,
+    pendingDocumentVerifying,
     pendingDocumentSubmission,
     pendingPayment,
     monthFrom: from,

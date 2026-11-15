@@ -26,7 +26,7 @@ type SalesStatusCounts = {
   installationStage: number;
   callLogStage: number;
   pendingRiskAssessment: number;
-  pendingSalesInfo: number;
+  pendingDocumentVerifying: number;
   pendingDocumentSubmission: number;
   pendingPayment: number;
   monthFrom: string;
@@ -61,7 +61,7 @@ type StatusCategory =
   | "installationStage"
   | "callLogStage"
   | "pendingRiskAssessment"
-  | "pendingSalesInfo"
+  | "pendingDocumentVerifying"
   | "pendingDocumentSubmission"
   | "pendingPayment";
 
@@ -305,16 +305,16 @@ export default function SalesClient({
       icon: "☎",
     },
     {
-      title: "Pending Risk Assessment / Doc. Verification",
+      title: "Pending Risk Assessment",
       category: "pendingRiskAssessment",
       count: salesStatus?.pendingRiskAssessment ?? 0,
       color: "risk",
       icon: "⌕",
     },
     {
-      title: "Pending Sales Info",
-      category: "pendingSalesInfo",
-      count: salesStatus?.pendingSalesInfo ?? 0,
+      title: "Pending Doc. Verifying",
+      category: "pendingDocumentVerifying",
+      count: salesStatus?.pendingDocumentVerifying ?? 0,
       color: "sales-info",
       icon: "▤",
     },
