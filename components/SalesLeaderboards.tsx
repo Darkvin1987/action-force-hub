@@ -186,8 +186,10 @@ export default function SalesLeaderboards() {
       <div
         style={{
           display: "grid",
-          gridTemplateColumns: "repeat(3, minmax(0, 1fr))",
+          gridTemplateColumns:
+            "repeat(auto-fit, minmax(min(100%, 320px), 1fr))",
           gap: 12,
+          width: "100%",
         }}
       >
         {leaderboards.map((board) => {
