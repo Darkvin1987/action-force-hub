@@ -5,6 +5,7 @@ import { useEffect, useState } from "react";
 
 import TopBar from "@/components/TopBar";
 import TeamSalesBreakdown from "../TeamSalesBreakdown";
+import SalesLeaderboards from "@/components/SalesLeaderboards";
 
 type DashboardProfile = {
   fullName: string;
@@ -364,6 +365,9 @@ export default function DashboardClient({
             </p>
           )}
         </section>
+        
+        {/* Organisation-wide Sales Leaderboards */}
+        <SalesLeaderboards />
 
         {/* Sales by Team */}
         <TeamSalesBreakdown

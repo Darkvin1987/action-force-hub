@@ -33,29 +33,10 @@ export default function TopBar({ role, memberCode }: TopBarProps) {
           <div className="brand-subtitle">{memberCode}</div>
         </div>
       </div>
-      
+
       <div className="topbar-actions">
-        <button
-          type="button"
-          className="avatar avatar-logo"
-          aria-label="Action Force logo"
-        >
-          <Image
-            src="/action-force-logo.png"
-            alt="Action Force"
-            width={44}
-            height={44}
-            style={{
-              width: "100%",
-              height: "100%",
-              objectFit: "contain",
-            }}
-          />
-        </button>
-          
         <LogoutButton />
       </div>
-
     </header>
   );
 }

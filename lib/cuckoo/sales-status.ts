@@ -8,7 +8,7 @@ export type SalesStatusCounts = {
   installationStage: number;
   callLogStage: number;
   pendingRiskAssessment: number;
-  pendingSalesInfo: number;
+  pendingDocumentVerifying: number;
   pendingDocumentSubmission: number;
   pendingPayment: number;
   monthFrom: string;
@@ -30,7 +30,7 @@ export async function getSalesStatusCounts(
     installationStage: 0,
     callLogStage: 0,
     pendingRiskAssessment: 0,
-    pendingSalesInfo: 0,
+    pendingDocumentVerifying: 0,
     pendingDocumentSubmission: 0,
     pendingPayment: 0,
     monthFrom: from,
@@ -42,39 +42,28 @@ export async function getSalesStatusCounts(
   }
 
   async function countOrders(
-    configure: (query: any) => any
-  ) {
-    let query = supabase
-      .from("cuckoo_sales_orders")
-      .select("sales_no", { count: "exact", head: true })
-      .in("member_code", memberCodes)
-      .gte("sales_date", from)
-      .lt("sales_date", toExclusive);
+  configure: (query: any) => any,
+  dateColumn: "sales_date" | "net_date" = "sales_date"
+) {
+  let query: any = supabase
+    .from("cuckoo_sales_orders")
+    .select("sales_no", { count: "exact", head: true })
+    .in("member_code", memberCodes)
+    .gte(dateColumn, from)
+    .lt(dateColumn, toExclusive);
 
-    query = configure(query);
+  query = configure(query);
 
-    const { count, error } = await query;
+  const { count, error } = await query;
 
-    if (error) {
-      console.error("SUPABASE SALES STATUS QUERY ERROR:", {
-        error,
-        message: error.message,
-        code: error.code,
-        details: error.details,
-        hint: error.hint,
-        ownProperties: Object.getOwnPropertyNames(error),
-        stack: error.stack,
-      });
-    
-      throw new Error(
-        `Unable to retrieve sales status: ${
-          error.message || error.code || "Unknown Supabase error"
-        }`
-      );
-    }
-
-    return count ?? 0;
+  if (error) {
+    throw new Error(
+      `Unable to retrieve sales status: ${error.message}`
+    );
   }
+
+  return count ?? 0;
+}
 
   const [
     netSales,
@@ -82,25 +71,28 @@ export async function getSalesStatusCounts(
     installationStage,
     callLogStage,
     pendingRiskAssessment,
-    pendingSalesInfo,
+    pendingDocumentVerifying,
     pendingDocumentSubmission,
     pendingPayment,
   ] = await Promise.all([
     // NET Sales
-    countOrders((q) =>
-      q.not("net_date", "is", null)
+    countOrders(
+      (q) => q.not("net_date", "is", null),
+      "net_date"
     ),
 
     // Incomplete Payment
     countOrders((q) =>
-      q.filter("psi_unit_count", "is", "null").eq("status_name", "Active")
+      q
+        .filter("psi_unit_count", "is", "null")
+        .eq("status_name", "Active")
     ),
 
     // Installation Stage
     countOrders((q) =>
       q.eq("step_name", "Installation Stage")
     ),
-    
+
     // Call Log Stage
     countOrders((q) =>
       q.eq("step_name", "Call-Log Stage")
@@ -108,15 +100,16 @@ export async function getSalesStatusCounts(
 
     // Pending Risk Assessment
     countOrders((q) =>
-      q.eq(
-        "step_name",
-        "Pending Risk Assessment"
-      )
+      q
+        .eq("step_name", "Pending Risk Assessment")
+        .eq("status_name", "Active")
     ),
 
-    // Pending Sales Info
+    // Pending Document Verifying
     countOrders((q) =>
-      q.eq("step_name", "Pending Document Verifying")
+      q
+        .eq("step_name", "Pending Document Verifying")
+        .eq("status_name", "Active")
     ),
 
     // Pending Document Submission
@@ -141,7 +134,7 @@ export async function getSalesStatusCounts(
     installationStage,
     callLogStage,
     pendingRiskAssessment,
-    pendingSalesInfo,
+    pendingDocumentVerifying,
     pendingDocumentSubmission,
     pendingPayment,
     monthFrom: from,
