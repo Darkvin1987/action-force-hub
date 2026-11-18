@@ -4331,3 +4331,96 @@ details[open] > summary .sales-tree-arrow .arrow-down {
     max-height: calc(100dvh - 110px);
   }
 }
+
+/* -------------------------------------------------------------------------- */
+/* Sales by Team — responsive table layout                                    */
+/* Added conservatively; existing page and component styles remain untouched. */
+/* -------------------------------------------------------------------------- */
+.sales-breakdown-table-wrap {
+  width: 100%;
+  min-width: 0;
+  overflow-x: auto;
+  -webkit-overflow-scrolling: touch;
+}
+
+.sales-breakdown-table {
+  width: 100%;
+  min-width: 0;
+}
+
+.sales-breakdown-table-header,
+.sales-breakdown-member-row {
+  width: 100%;
+  min-width: 0;
+  box-sizing: border-box;
+}
+
+.sales-breakdown-table-header > *,
+.sales-breakdown-member-row > * {
+  min-width: 0;
+  overflow-wrap: anywhere;
+}
+
+@media (max-width: 600px) {
+  .sales-breakdown-table-header {
+    display: none !important;
+  }
+
+  .sales-breakdown-member-row {
+    grid-template-columns: minmax(0, 1fr) minmax(0, 1fr) !important;
+    gap: 8px 10px !important;
+    padding: 10px !important;
+  }
+
+  .sales-breakdown-member-row > :nth-child(1) {
+    align-self: center;
+    font-size: 11px !important;
+  }
+
+  .sales-breakdown-member-row > :nth-child(2) {
+    text-align: right;
+  }
+
+  .sales-breakdown-member-row > :nth-child(2) > div:first-child {
+    font-size: 12px !important;
+    line-height: 1.35;
+  }
+
+  .sales-breakdown-member-row > :nth-child(3),
+  .sales-breakdown-member-row > :nth-child(4) {
+    padding-top: 7px;
+    border-top: 1px solid #e5e7eb;
+    font-size: 12px !important;
+  }
+
+  .sales-breakdown-member-row:not(.sales-breakdown-standalone-row) > :nth-child(3)::before {
+    content: "Net Sales";
+    display: block;
+    margin-bottom: 3px;
+    color: #64748b;
+    font-size: 10px;
+    font-weight: 500;
+    text-align: right;
+  }
+
+  .sales-breakdown-member-row:not(.sales-breakdown-standalone-row) > :nth-child(4)::before {
+    content: "Overall Sales";
+    display: block;
+    margin-bottom: 3px;
+    color: #64748b;
+    font-size: 10px;
+    font-weight: 500;
+    text-align: right;
+  }
+
+  .sales-breakdown-member-row > :nth-child(3),
+  .sales-breakdown-member-row > :nth-child(4) {
+    text-align: right;
+  }
+
+  .sales-breakdown-member-row > :nth-child(3) > div,
+  .sales-breakdown-member-row > :nth-child(4) > div {
+    text-align: right;
+  }
+}
+

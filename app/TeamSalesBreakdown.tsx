@@ -55,10 +55,11 @@ function isAM(member: SalesNode) {
 function SalesTableHeader() {
   return (
     <div
+      className="sales-breakdown-table-header"
       style={{
         display: "grid",
         gridTemplateColumns:
-          "minmax(120px, 0.9fr) minmax(150px, 1.5fr) minmax(85px, 0.7fr) minmax(100px, 0.8fr)",
+          "minmax(0, 1fr) minmax(0, 1.35fr) minmax(78px, 0.7fr) minmax(88px, 0.8fr)",
         gap: 12,
         padding: "0 14px 10px",
         color: "#64748b",
@@ -92,10 +93,11 @@ function MemberSalesRow({
 }) {
   return (
     <div
+      className="sales-breakdown-member-row"
       style={{
         display: "grid",
         gridTemplateColumns:
-          "minmax(120px, 0.9fr) minmax(150px, 1.5fr) minmax(85px, 0.7fr) minmax(100px, 0.8fr)",
+          "minmax(0, 1fr) minmax(0, 1.35fr) minmax(78px, 0.7fr) minmax(88px, 0.8fr)",
         gap: 12,
         alignItems: "center",
         padding: "12px 14px",
@@ -173,10 +175,11 @@ function StandaloneMemberSalesRow({
 }) {
   return (
     <div
+      className="sales-breakdown-member-row sales-breakdown-standalone-row"
       style={{
         display: "grid",
         gridTemplateColumns:
-          "minmax(120px, 0.9fr) minmax(150px, 1.5fr) minmax(85px, 0.7fr) minmax(100px, 0.8fr)",
+          "minmax(0, 1fr) minmax(0, 1.35fr) minmax(78px, 0.7fr) minmax(88px, 0.8fr)",
         gap: 12,
         alignItems: "center",
         padding: "12px 14px",
@@ -282,8 +285,8 @@ function AMExpandedTable({
         borderTop: "1px solid #e2e8f0",
       }}
     >
-      <div style={{ overflowX: "auto" }}>
-        <div style={{ minWidth: 540 }}>
+      <div className="sales-breakdown-table-wrap">
+        <div className="sales-breakdown-table">
           <SalesTableHeader />
 
           <div
@@ -666,8 +669,8 @@ export default function TeamSalesBreakdown({
                     borderTop: "1px solid #e2e8f0",
                   }}
                 >
-                  <div style={{ overflowX: "auto" }}>
-                    <div style={{ minWidth: 540 }}>
+                  <div className="sales-breakdown-table-wrap">
+                    <div className="sales-breakdown-table">
                       <SalesTableHeader />
 
                       <div
@@ -693,11 +696,9 @@ export default function TeamSalesBreakdown({
               {group.standaloneMembers?.map((member) => (
                 <div
                   key={member.memberCode}
-                  style={{
-                    overflowX: "auto",
-                  }}
+                  className="sales-breakdown-table-wrap"
                 >
-                  <div style={{ minWidth: 540 }}>
+                  <div className="sales-breakdown-table">
                     <StandaloneMemberSalesRow
                       member={member}
                     />
