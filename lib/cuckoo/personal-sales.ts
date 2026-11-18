@@ -46,19 +46,19 @@ export async function getPersonalSales(
   year?: number,
   month?: number
 ) {
-  const {
-    from,
-    toExclusive,
-    toDisplay,
-  } = getMalaysiaMonthRange(year, month);
+  const { from, toExclusive, toDisplay } =
+    getMalaysiaMonthRange(year, month);
 
-  async function countSales(brand?: string) {
+  async function countSales(
+    dateColumn: "net_date" | "sales_date",
+    brand?: string
+  ) {
     let query = supabase
       .from("cuckoo_sales_orders")
       .select("sales_no", { count: "exact", head: true })
       .eq("member_code", memberCode)
-      .gte("sales_date", from)
-      .lt("sales_date", toExclusive);
+      .gte(dateColumn, from)
+      .lt(dateColumn, toExclusive);
 
     if (brand) {
       query = query.eq("brand", brand);
@@ -75,16 +75,32 @@ export async function getPersonalSales(
     return count ?? 0;
   }
 
-  const [branded, coCreated, total] = await Promise.all([
-    countSales("Cuckoo Branded"),
-    countSales("Co-Created"),
-    countSales(),
+  const [
+    branded,
+    coCreated,
+    total,
+    overallBranded,
+    overallCoCreated,
+    overallTotal,
+  ] = await Promise.all([
+    countSales("net_date", "Cuckoo Branded"),
+    countSales("net_date", "Co-Created"),
+    countSales("net_date"),
+
+    countSales("sales_date", "Cuckoo Branded"),
+    countSales("sales_date", "Co-Created"),
+    countSales("sales_date"),
   ]);
 
   return {
     branded,
     coCreated,
     total,
+
+    overallBranded,
+    overallCoCreated,
+    overallTotal,
+
     monthFrom: from,
     monthTo: toDisplay,
   };

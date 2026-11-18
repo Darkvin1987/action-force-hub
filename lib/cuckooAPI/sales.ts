@@ -1,8 +1,20 @@
 
+import { env } from "cloudflare:workers";
 import {
   getCuckooAccessToken,
   clearCuckooAccessToken,
 } from "./auth";
+
+export type CuckooSalesOrder = Record<string, unknown>;
+export type CuckooSalesPage = {
+  pageNumber: number;
+  pageSize: number;
+  totalCount: number;
+  totalPages: number;
+  hasPreviousPage: boolean;
+  hasNextPage: boolean;
+  salesOrders: CuckooSalesOrder[];
+};
 
 // Calculate the first and last day of the current month
 // using Malaysia time.
@@ -39,7 +51,7 @@ export async function getCuckooSales(
   pageNumber = 1,
   pageSize = 30
 ) {
-  const baseUrl = process.env.CUCKOO_API_BASE_URL;
+  const baseUrl = env.CUCKOO_API_BASE_URL;
 
   if (!baseUrl) {
     throw new Error("CUCKOO API base URL is missing.");
@@ -88,7 +100,11 @@ export async function getCuckooSales(
     );
   }
 
-  const result = await response.json();
+  const result = (await response.json()) as {
+    result?: string;
+    message?: string;
+    data: CuckooSalesPage;
+  };
 
   if (result.result !== "1") {
     throw new Error(

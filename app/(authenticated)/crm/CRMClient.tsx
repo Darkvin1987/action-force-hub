@@ -36,6 +36,7 @@ type Customer = {
     resultRemark: string;
     hasAppointment: boolean;
   };
+  callLog: string | null;
 };
 
 type StatusOption = {
@@ -88,8 +89,8 @@ function getStatusClass(status: string) {
     case "Call Log Stage":
       return "crm-status-new";
 
-    case "Pending Risk Assessment / Doc. Verification":
-    case "Pending Sales Info":
+    case "Pending Risk Assessment":
+    case "Pending Doc. Verifying":
     case "Pending Doc. Submission":
       return "crm-status-follow";
 
@@ -706,7 +707,7 @@ export default function CRMClient() {
                   </div>
 
                   <div className="crm-profile-full">
-                    <span>Installation Remark</span>
+                    <span>Call Log Remark</span>
                     <strong>
                       {selected.installation.remark ||
                         "Not available"}
@@ -722,6 +723,34 @@ export default function CRMClient() {
                   </div>
                 </div>
               </div>
+              {/* Call Log */}
+              {/*<div className="crm-detail-section">
+                <h3>Call Log</h3>
+
+                {selected.callLog ? (
+                  <div
+                    className="crm-call-log"
+                    style={{
+                      whiteSpace: "pre-wrap",
+                      overflowWrap: "anywhere",
+                      background: "var(--crm-card, #f8fafc)",
+                      border: "1px solid var(--crm-border, #e5e7eb)",
+                      borderRadius: "10px",
+                      padding: "16px",
+                      fontSize: "13px",
+                      lineHeight: "1.7",
+                      maxHeight: "400px",
+                      overflowY: "auto",
+                    }}
+                  >
+                    {selected.callLog}
+                  </div>
+                ) : (
+                  <p className="crm-muted">
+                    No call log information available for this customer.
+                  </p>
+                )}
+              </div>*/}
             </section>
           </div>
         )}

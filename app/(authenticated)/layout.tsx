@@ -18,10 +18,15 @@ export default async function AuthenticatedLayout({
     redirect("/login");
   }
 
+  // First-time users must change their temporary password.
+  // The change-password page is now outside this layout.
+  if (profile.must_change_password) {
+    redirect("/change-password");
+  }
+
   return (
     <>
       {children}
-
       <BottomNav role={profile.role} />
     </>
   );

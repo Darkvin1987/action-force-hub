@@ -1,13 +1,12 @@
 
 import type { SupabaseClient } from "@supabase/supabase-js";
+
 import { syncCuckooSales } from "@/lib/cuckoo/sync-sales";
-import { getMalaysiaMonthRange } from "@/lib/cuckoo/personal-sales";
 
 const FRESHNESS_MINUTES = 15;
-const MEMBER_CONCURRENCY = 2;
 const IN_PROGRESS_TIMEOUT_MINUTES = 10;
 
-type StaffProfile = {
+export type StaffProfile = {
   id: string;
   member_code: string;
   role: string;
@@ -23,6 +22,19 @@ const ALLOWED_CHILD_ROLES: Record<string, string[]> = {
   ID: [],
 };
 
+function getCurrentMalaysiaPeriod() {
+  const parts = new Intl.DateTimeFormat("en-CA", {
+    timeZone: "Asia/Kuala_Lumpur",
+    year: "numeric",
+    month: "2-digit",
+  }).formatToParts(new Date());
+
+  return {
+    year: Number(parts.find((part) => part.type === "year")?.value),
+    month: Number(parts.find((part) => part.type === "month")?.value),
+  };
+}
+
 function getAuthorisedTeam(
   manager: StaffProfile,
   allStaff: StaffProfile[]
@@ -33,6 +45,7 @@ function getAuthorisedTeam(
     if (!staff.manager_id) continue;
 
     const children = childrenByManager.get(staff.manager_id) ?? [];
+
     children.push(staff);
     childrenByManager.set(staff.manager_id, children);
   }
@@ -62,7 +75,11 @@ function getAuthorisedTeam(
 
 export async function getAuthorisedTeamMembers(
   supabase: SupabaseClient,
-  manager: StaffProfile
+  manager: StaffProfile,
+  selectedPeriod?: {
+    month: number;
+    year: number;
+  }
 ) {
   const { data: allStaff, error } = await supabase
     .from("staff_profiles")
@@ -76,8 +93,35 @@ export async function getAuthorisedTeamMembers(
   }
 
   const team = getAuthorisedTeam(manager, allStaff ?? []);
-  const { from, toExclusive } = getMalaysiaMonthRange();
 
+  // Use the selected month and year when supplied.
+  // Otherwise, use the current Malaysia month.
+  const period = selectedPeriod ?? getCurrentMalaysiaPeriod();
+
+  const monthStartString =
+    `${period.year}-${String(period.month).padStart(2, "0")}-01`;
+
+  const nextMonth = new Date(
+    Date.UTC(period.year, period.month, 1)
+  );
+
+  const nextMonthStartString = [
+    nextMonth.getUTCFullYear(),
+    String(nextMonth.getUTCMonth() + 1).padStart(2, "0"),
+    "01",
+  ].join("-");
+
+  // Convert Malaysia month boundaries to timestamps.
+  const monthStart = new Date(
+    `${monthStartString}T00:00:00+08:00`
+  );
+
+  const monthEnd = new Date(
+    `${nextMonthStartString}T00:00:00+08:00`
+  );
+
+  // Count team members whose profiles were created
+  // within the selected Malaysia calendar month.
   const newRecruitsThisMonth = team.filter((member) => {
     if (!member.created_at) return false;
 
@@ -85,15 +129,20 @@ export async function getAuthorisedTeamMembers(
 
     return (
       !Number.isNaN(createdAt.getTime()) &&
-      createdAt >= new Date(`${from}T00:00:00+08:00`) &&
-      createdAt < new Date(`${toExclusive}T00:00:00+08:00`)
+      createdAt >= monthStart &&
+      createdAt < monthEnd
     );
   }).length;
 
   return {
+    // This remains the current active authorised team headcount.
     teamMemberCount: team.length,
+
+    // This now follows the selected month and year.
     newRecruitsThisMonth,
+
     teamMemberCodes: team.map((member) => member.member_code),
+
     team,
   };
 }
@@ -115,8 +164,6 @@ export async function syncMemberIfStale(
     );
   }
 
-  // Do not start a duplicate sync if another request is
-  // already synchronising this member.
   const lastUpdatedAt = status?.updated_at
     ? new Date(status.updated_at).getTime()
     : 0;
@@ -129,7 +176,7 @@ export async function syncMemberIfStale(
   if (isCurrentlySyncing) {
     return {
       memberCode,
-      status: "IN_PROGRESS",
+      status: "IN_PROGRESS" as const,
       message: "A synchronisation is already running.",
     };
   }
@@ -146,7 +193,7 @@ export async function syncMemberIfStale(
   if (!force && isFresh) {
     return {
       memberCode,
-      status: "SKIPPED",
+      status: "SKIPPED" as const,
       message: "Recent successful sync.",
     };
   }
@@ -196,14 +243,14 @@ export async function syncMemberIfStale(
 
     return {
       memberCode,
-      status: "SUCCESS",
+      status: "SUCCESS" as const,
       synced: result.synced,
     };
   } catch (error) {
     const message =
       error instanceof Error ? error.message : "Unknown sync error";
 
-    await supabase
+    const { error: failureUpdateError } = await supabase
       .from("cuckoo_sales_sync_status")
       .upsert(
         {
@@ -215,64 +262,17 @@ export async function syncMemberIfStale(
         { onConflict: "member_code" }
       );
 
+    if (failureUpdateError) {
+      console.error(
+        `Unable to record failed sync for ${memberCode}:`,
+        failureUpdateError.message
+      );
+    }
+
     return {
       memberCode,
-      status: "FAILED",
+      status: "FAILED" as const,
       message,
     };
   }
-}
-
-async function runWithConcurrency<T, R>(
-  items: T[],
-  limit: number,
-  worker: (item: T) => Promise<R>
-): Promise<R[]> {
-  const results: R[] = new Array(items.length);
-  let nextIndex = 0;
-
-  async function runWorker() {
-    while (true) {
-      const index = nextIndex++;
-
-      if (index >= items.length) return;
-
-      results[index] = await worker(items[index]);
-    }
-  }
-
-  await Promise.all(
-    Array.from(
-      { length: Math.min(limit, items.length) },
-      () => runWorker()
-    )
-  );
-
-  return results;
-}
-
-export async function syncAuthorisedTeamSales(
-  supabase: SupabaseClient,
-  manager: StaffProfile,
-  force = false
-) {
-  const teamInfo = await getAuthorisedTeamMembers(supabase, manager);
-
-  const results = await runWithConcurrency(
-    teamInfo.team,
-    MEMBER_CONCURRENCY,
-    (member) =>
-      syncMemberIfStale(
-        supabase,
-        member.member_code,
-        force
-      )
-  );
-
-  return {
-    teamMemberCount: teamInfo.teamMemberCount,
-    newRecruitsThisMonth: teamInfo.newRecruitsThisMonth,
-    teamMemberCodes: teamInfo.teamMemberCodes,
-    results,
-  };
 }

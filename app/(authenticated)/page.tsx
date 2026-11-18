@@ -3,6 +3,7 @@ import { Suspense } from "react";
 import { connection } from "next/server";
 import { redirect } from "next/navigation";
 import { getStaffProfile } from "@/lib/staff/get-staff-profile";
+import { createAdminClient } from "@/lib/supabase/admin";
 import DashboardClient from "./DashboardClient";
 
 function DashboardLoading() {
@@ -29,6 +30,23 @@ async function DashboardContent() {
 
   if (!staff.member_code) {
     throw new Error("Staff member code is missing.");
+  }
+
+  // Update Last Login after the authenticated staff profile is verified.
+  const admin = createAdminClient();
+
+  const { error } = await admin
+    .from("staff_profiles")
+    .update({
+      last_login_at: new Date().toISOString(),
+    })
+    .eq("member_code", staff.member_code);
+
+  if (error) {
+    console.error("[LAST LOGIN UPDATE FAILED]", {
+      memberCode: staff.member_code,
+      error: error.message,
+    });
   }
 
   return (

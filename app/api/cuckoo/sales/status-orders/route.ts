@@ -20,7 +20,7 @@ type Category =
   | "installationStage"
   | "callLogStage"
   | "pendingRiskAssessment"
-  | "pendingSalesInfo"
+  | "pendingDocumentVerifying"
   | "pendingDocumentSubmission"
   | "pendingPayment";
 
@@ -56,7 +56,7 @@ type RawOrder = {
 
 const allowedRoles: Record<string, string[]> = {
   DIRECTOR: ["GAM", "ID"],
-  GAM: ["AM"],
+  GAM: ["AM", "SC", "ID"],
   AM: ["SC"],
   SC: [],
   ID: [],
@@ -68,7 +68,7 @@ const validCategories: Category[] = [
   "installationStage",
   "callLogStage",
   "pendingRiskAssessment",
-  "pendingSalesInfo",
+  "pendingDocumentVerifying",
   "pendingDocumentSubmission",
   "pendingPayment",
 ];
@@ -278,12 +278,12 @@ export async function GET(request: Request) {
       case "pendingRiskAssessment":
         query = query.eq(
           "step_name",
-          "Pending Risk Assessment / Doc. Verification"
+          "Pending Risk Assessment"
         );
         break;
 
-      case "pendingSalesInfo":
-        query = query.eq("step_name", "Pending Sales Info");
+      case "pendingDocumentVerifying":
+        query = query.eq("step_name", "Pending Document Verifying");
         break;
 
       case "pendingDocumentSubmission":

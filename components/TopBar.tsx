@@ -1,6 +1,7 @@
 
 "use client";
 
+import Image from "next/image";
 import LogoutButton from "@/components/LogoutButton";
 
 type TopBarProps = {
@@ -12,7 +13,20 @@ export default function TopBar({ role, memberCode }: TopBarProps) {
   return (
     <header className="topbar">
       <div className="brand">
-        <div className="brand-mark">AF</div>
+        <div className="brand-mark">
+          <Image
+            src="/action-force-logo.png"
+            alt="Action Force"
+            width={44}
+            height={44}
+            priority
+            style={{
+              width: "100%",
+              height: "100%",
+              objectFit: "contain",
+            }}
+          />
+        </div>
 
         <div>
           <div className="brand-name">{role}</div>
@@ -21,14 +35,6 @@ export default function TopBar({ role, memberCode }: TopBarProps) {
       </div>
 
       <div className="topbar-actions">
-        <button
-          type="button"
-          className="avatar"
-          aria-label="User profile"
-        >
-          AH
-        </button>
-
         <LogoutButton />
       </div>
     </header>

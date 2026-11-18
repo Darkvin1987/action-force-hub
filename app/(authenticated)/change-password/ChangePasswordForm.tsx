@@ -45,7 +45,9 @@ export default function ChangePasswordForm() {
         body: JSON.stringify({ new_password: password }),
       });
 
-      const result = await response.json();
+      const result = (await response.json()) as {
+        error?: string;
+      };
 
       if (!response.ok) {
         setError(result.error || "Unable to change your password.");

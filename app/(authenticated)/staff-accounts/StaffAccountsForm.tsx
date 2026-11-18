@@ -1,4 +1,3 @@
-
 "use client";
 
 import { useEffect, useState } from "react";
@@ -33,7 +32,10 @@ export default function StaffAccountsForm() {
   async function loadStaff() {
     try {
       const response = await fetch("/api/staff-management");
-      const result = await response.json();
+      const result = (await response.json()) as {
+        staff?: Staff[];
+        error?: string;
+      };
 
       if (!response.ok) {
         setMessage(result.error ?? "Unable to load staff.");
@@ -81,15 +83,36 @@ export default function StaffAccountsForm() {
         }),
       });
 
-      const result = await response.json();
+      const result = (await response.json()) as
+        Partial<CreatedAccount> & {
+          message?: string;
+          error?: string;
+        };
 
       if (!response.ok) {
         setMessage(result.error ?? "Unable to create the account.");
         return;
       }
 
-      setCreated(result);
-      setMessage(result.message ?? "Account created successfully.");
+      if (
+        !result.staff ||
+        typeof result.temporary_password !== "string"
+      ) {
+        setMessage(
+          "The account response was incomplete. Please check the account before trying again."
+        );
+        return;
+      }
+
+      setCreated({
+        staff: result.staff,
+        temporary_password: result.temporary_password,
+      });
+
+      setMessage(
+        result.message ?? "Account created successfully."
+      );
+
       setStaffProfileId("");
       setEmail("");
 
@@ -161,6 +184,12 @@ export default function StaffAccountsForm() {
           />
         </label>
 
+        <p style={{ color: "#666", fontSize: 13 }}>
+          The registered mobile number will automatically be used
+          as the initial password. The staff member must change it
+          after the first login.
+        </p>
+
         <button
           type="submit"
           disabled={loading || eligibleStaff.length === 0}
@@ -192,20 +221,22 @@ export default function StaffAccountsForm() {
             color: "#222",
           }}
         >
-          <h3>Temporary Password — Copy Now</h3>
+          <h3>Initial Password — Copy Now</h3>
 
           <p>
             <strong>Staff:</strong> {created.staff.full_name}
           </p>
+
           <p>
             <strong>Staff ID:</strong> {created.staff.member_code}
           </p>
+
           <p>
             <strong>Email:</strong> {created.staff.email}
           </p>
 
           <p>
-            <strong>Temporary password:</strong>
+            <strong>Initial password:</strong>
           </p>
 
           <code
@@ -238,12 +269,13 @@ export default function StaffAccountsForm() {
               cursor: "pointer",
             }}
           >
-            Copy Temporary Password
+            Copy Initial Password
           </button>
 
           <p style={{ fontSize: 13 }}>
-            Copy and deliver this password securely to the staff member.
-            It will not be shown again after you leave this page.
+            This is the registered mobile number. Deliver it securely
+            to the staff member. It will not be shown again after
+            leaving this page.
           </p>
         </div>
       )}
