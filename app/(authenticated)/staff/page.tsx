@@ -1,4 +1,3 @@
-
 import Link from "next/link";
 import { connection } from "next/server";
 import { redirect } from "next/navigation";
@@ -23,6 +22,37 @@ export default async function StaffPage() {
     redirect("/");
   }
 
+  const cardStyle: React.CSSProperties = {
+    display: "block",
+    textDecoration: "none",
+    color: "inherit",
+    background: "#ffffff",
+    border: "1px solid #e2e8f0",
+    borderRadius: 16,
+    padding: 24,
+    boxShadow: "0 2px 8px rgba(0,0,0,0.04)",
+  };
+
+  const iconStyle: React.CSSProperties = {
+    width: 52,
+    height: 52,
+    borderRadius: 12,
+    background: "#eaf1fb",
+    color: "#234B87",
+    display: "flex",
+    alignItems: "center",
+    justifyContent: "center",
+    fontSize: 26,
+    marginBottom: 20,
+  };
+
+  const linkStyle: React.CSSProperties = {
+    color: "#234B87",
+    fontWeight: 600,
+    fontSize: 14,
+    marginTop: 24,
+  };
+
   return (
     <main className="app-shell">
       <TopBar
@@ -44,7 +74,7 @@ export default async function StaffPage() {
           </h1>
 
           <p style={{ color: "#64748b", marginTop: 8 }}>
-            Manage staff profiles, reporting relationships and login accounts.
+            Manage staff profiles, reporting relationships, login accounts and memo permissions.
           </p>
         </div>
 
@@ -56,35 +86,8 @@ export default async function StaffPage() {
           }}
         >
           {/* Staff Management */}
-          <Link
-            href="/team-management"
-            style={{
-              display: "block",
-              textDecoration: "none",
-              color: "inherit",
-              background: "#ffffff",
-              border: "1px solid #e2e8f0",
-              borderRadius: 16,
-              padding: 24,
-              boxShadow: "0 2px 8px rgba(0,0,0,0.04)",
-            }}
-          >
-            <div
-              style={{
-                width: 52,
-                height: 52,
-                borderRadius: 12,
-                background: "#eaf1fb",
-                color: "#234B87",
-                display: "flex",
-                alignItems: "center",
-                justifyContent: "center",
-                fontSize: 26,
-                marginBottom: 20,
-              }}
-            >
-              ♙
-            </div>
+          <Link href="/team-management" style={cardStyle}>
+            <div style={iconStyle}>♙</div>
 
             <h2 style={{ fontSize: 19, fontWeight: 700 }}>
               Staff Management
@@ -102,48 +105,14 @@ export default async function StaffPage() {
               relationships within the organisation.
             </p>
 
-            <div
-              style={{
-                color: "#234B87",
-                fontWeight: 600,
-                fontSize: 14,
-                marginTop: 24,
-              }}
-            >
+            <div style={linkStyle}>
               Manage Staff →
             </div>
           </Link>
 
           {/* Staff Login Accounts */}
-          <Link
-            href="/staff-accounts"
-            style={{
-              display: "block",
-              textDecoration: "none",
-              color: "inherit",
-              background: "#ffffff",
-              border: "1px solid #e2e8f0",
-              borderRadius: 16,
-              padding: 24,
-              boxShadow: "0 2px 8px rgba(0,0,0,0.04)",
-            }}
-          >
-            <div
-              style={{
-                width: 52,
-                height: 52,
-                borderRadius: 12,
-                background: "#eaf1fb",
-                color: "#234B87",
-                display: "flex",
-                alignItems: "center",
-                justifyContent: "center",
-                fontSize: 26,
-                marginBottom: 20,
-              }}
-            >
-              ⚙
-            </div>
+          <Link href="/staff-accounts" style={cardStyle}>
+            <div style={iconStyle}>⚙</div>
 
             <h2 style={{ fontSize: 19, fontWeight: 700 }}>
               Staff Login Accounts
@@ -161,15 +130,33 @@ export default async function StaffPage() {
               and Independent Distributors.
             </p>
 
-            <div
+            <div style={linkStyle}>
+              Manage Login Accounts →
+            </div>
+          </Link>
+
+          {/* Memo Permissions */}
+          <Link href="/memo-permissions" style={cardStyle}>
+            <div style={iconStyle}>♧</div>
+
+            <h2 style={{ fontSize: 19, fontWeight: 700 }}>
+              Memo Permissions
+            </h2>
+
+            <p
               style={{
-                color: "#234B87",
-                fontWeight: 600,
+                color: "#64748b",
                 fontSize: 14,
-                marginTop: 24,
+                lineHeight: 1.6,
+                marginTop: 8,
               }}
             >
-              Manage Login Accounts →
+              Assign and manage staff permissions to create announcements,
+              promotions, SOPs and training memos.
+            </p>
+
+            <div style={linkStyle}>
+              Manage Memo Permissions →
             </div>
           </Link>
         </div>

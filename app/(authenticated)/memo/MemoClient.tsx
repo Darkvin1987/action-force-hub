@@ -1,8 +1,6 @@
-
 "use client";
 
-import { useMemo, useState } from "react";
-import BottomNav from "@/components/BottomNav";
+import { useCallback, useEffect, useMemo, useState } from "react";
 
 type Category =
   | "All"
@@ -11,70 +9,32 @@ type Category =
   | "SOP"
   | "Training";
 
-type Memo = {
-  id: number;
+type Announcement = {
+  id: string;
   title: string;
   category: Exclude<Category, "All">;
-  date: string;
-  audience: string;
-  summary: string;
+  publication_date: string;
+  target_audience: string;
+  google_link: string;
   content: string;
-  pinned: boolean;
+  created_at: string;
 };
 
 type MemoClientProps = {
   role: string;
 };
 
-const initialMemos: Memo[] = [
-  {
-    id: 1,
-    title: "October 2026 Sales Target: 2,500 Units",
-    category: "Announcement",
-    date: "2026-10-09",
-    audience: "All Action Force Members",
-    summary: "Stay focused and work together to achieve our monthly target.",
-    content:
-      "Our October sales target is 2,500 units. Every sales consultant and leader plays an important role. Review your personal targets, support your teammates and maintain consistent follow-up with customers. These figures are illustrative demo content.",
-    pinned: true,
-  },
-  {
-    id: 2,
-    title: "Sales Process and Documentation Reminder",
-    category: "SOP",
-    date: "2026-10-08",
-    audience: "All Sales Members",
-    summary:
-      "Remember to follow approved sales processes and documentation requirements.",
-    content:
-      "Please follow the current company-approved sales process. Ensure that customer information is accurate, required documents are completed and all submissions follow official HQ procedures. Refer to the latest approved SOP for the actual requirements.",
-    pinned: false,
-  },
-  {
-    id: 3,
-    title: "October Product Promotion Briefing",
-    category: "Promotion",
-    date: "2026-10-07",
-    audience: "Sales Consultants and Leaders",
-    summary:
-      "Review the latest product campaign information before presenting offers.",
-    content:
-      "This demo memo reminds team members to review official promotion terms, eligibility requirements and validity dates before discussing any offer with customers. Always refer to current HQ-approved promotional materials.",
-    pinned: false,
-  },
-  {
-    id: 4,
-    title: "Action Force Leadership Training",
-    category: "Training",
-    date: "2026-10-06",
-    audience: "Agency Managers and Above",
-    summary:
-      "Prepare for upcoming leadership development and team-building sessions.",
-    content:
-      "This sample training announcement highlights leadership development, recruitment, coaching and team performance. The actual training date, time and venue should be confirmed through an official announcement.",
-    pinned: false,
-  },
-];
+type PermissionsApiResponse = {
+  success?: boolean;
+  error?: string;
+  categories?: string[];
+};
+
+type AnnouncementApiResponse = {
+  success?: boolean;
+  error?: string;
+  announcements?: Announcement[];
+};
 
 const categories: Category[] = [
   "All",
@@ -84,6 +44,20 @@ const categories: Category[] = [
   "Training",
 ];
 
+const formCategories: Exclude<Category, "All">[] = [
+  "Announcement",
+  "Promotion",
+  "SOP",
+  "Training",
+];
+
+const audiences = [
+  "All Action Force Members",
+  "Sales Consultants",
+  "Agency Managers and Above",
+  "Group Agency Managers and Above",
+] as const;
+
 function formatDate(date: string) {
   return new Date(`${date}T12:00:00`).toLocaleDateString("en-MY", {
     day: "numeric",
@@ -92,103 +66,149 @@ function formatDate(date: string) {
   });
 }
 
-export default function MemoClient({ role }: MemoClientProps) {
-  const isDirector = role === "DIRECTOR";
+export default function MemoClient(_props: MemoClientProps) {
 
-  const [memos, setMemos] = useState(initialMemos);
+  // React state below is only for temporary interface state.
+  // Announcement records are always loaded from and saved to Supabase via the API.
+  const [announcements, setAnnouncements] = useState<Announcement[]>([]);
+  const [loading, setLoading] = useState(true);
+  const [saving, setSaving] = useState(false);
   const [search, setSearch] = useState("");
   const [category, setCategory] = useState<Category>("All");
-  const [selected, setSelected] = useState<Memo | null>(null);
-  const [readIds, setReadIds] = useState<number[]>([]);
+  const [selected, setSelected] = useState<Announcement | null>(null);
   const [showForm, setShowForm] = useState(false);
   const [notice, setNotice] = useState("");
+  const [error, setError] = useState("");
+  const [permittedCategories, setPermittedCategories] = useState<string[]>([]);
+  const loadPermissions = useCallback(async () => {
+    try {
+      const response = await fetch("/api/announcement-permissions", {
+        method: "GET",
+        cache: "no-store",
+      });
+      const result = (await response.json()) as PermissionsApiResponse;
+      if (!response.ok || !result.success) {
+        throw new Error(result.error || "Unable to load memo permissions.");
+      }
+      setPermittedCategories(result.categories ?? []);
+    } catch (err) {
+      setError(err instanceof Error ? err.message : "Unable to load memo permissions.");
+    }
+  }, []);
 
-  const filteredMemos = useMemo(() => {
+  const loadAnnouncements = useCallback(async () => {
+    setLoading(true);
+    setError("");
+
+    try {
+      const response = await fetch("/api/announcements", {
+        method: "GET",
+        cache: "no-store",
+      });
+
+      const result = (await response.json()) as AnnouncementApiResponse;
+
+      if (!response.ok || !result.success) {
+        throw new Error(result.error || "Unable to load announcements.");
+      }
+
+      setAnnouncements(result.announcements ?? []);
+    } catch (err) {
+      setError(
+        err instanceof Error
+          ? err.message
+          : "Unable to load announcements."
+      );
+    } finally {
+      setLoading(false);
+    }
+  }, []);
+
+  useEffect(() => {
+    void loadAnnouncements();
+    void loadPermissions();
+  }, [loadAnnouncements, loadPermissions]);
+
+  const filteredAnnouncements = useMemo(() => {
     const term = search.toLowerCase().trim();
 
-    return memos
-      .filter((memo) => {
+    return announcements
+      .filter((announcement) => {
         const matchesCategory =
-          category === "All" || memo.category === category;
+          category === "All" || announcement.category === category;
 
         const matchesSearch = [
-          memo.title,
-          memo.summary,
-          memo.content,
-          memo.audience,
-          memo.category,
+          announcement.title,
+          announcement.content,
+          announcement.target_audience,
+          announcement.category,
+          announcement.google_link,
         ].some((value) => value.toLowerCase().includes(term));
 
         return matchesCategory && matchesSearch;
       })
       .sort(
         (a, b) =>
-          Number(b.pinned) - Number(a.pinned) ||
-          b.date.localeCompare(a.date)
+          b.publication_date.localeCompare(a.publication_date) ||
+          b.created_at.localeCompare(a.created_at)
       );
-  }, [memos, search, category]);
+  }, [announcements, search, category]);
 
-  function openMemo(memo: Memo) {
-    setSelected(memo);
-    setShowForm(false);
-
-    setReadIds((current) =>
-      current.includes(memo.id) ? current : [...current, memo.id]
-    );
-
-    setNotice("");
-  }
-
-  function publishMemo(formData: FormData) {
-    // Only Directors can publish through this interface.
-    if (!isDirector) {
-      setNotice("You are not authorised to create memos.");
+  async function publishAnnouncement(formData: FormData) {
+    const chosenCategory = String(formData.get("category") ?? "");
+    if (!permittedCategories.includes(chosenCategory)) {
+      setNotice("You are not authorised to create a memo in this category.");
       setShowForm(false);
       return;
     }
 
-    const title = String(formData.get("title") || "").trim();
-    const summary = String(formData.get("summary") || "").trim();
-    const content = String(formData.get("content") || "").trim();
-
-    const memoCategory = String(
-      formData.get("category") || "Announcement"
-    ) as Exclude<Category, "All">;
-
-    const audience = String(
-      formData.get("audience") || "All Action Force Members"
-    );
-
-    const date = String(formData.get("date") || "");
-
-    if (!title || !summary || !content || !date) {
-      setNotice("Please complete all required fields.");
-      return;
-    }
-
-    const newMemo: Memo = {
-      id: Date.now(),
-      title,
-      category: memoCategory,
-      date,
-      audience,
-      summary,
-      content,
-      pinned: false,
+    const payload = {
+      title: String(formData.get("title") ?? "").trim(),
+      category: String(formData.get("category") ?? "Announcement"),
+      publication_date: String(formData.get("date") ?? ""),
+      target_audience: String(
+        formData.get("audience") ?? "All Action Force Members"
+      ),
+      google_link: String(formData.get("google_link") ?? "").trim(),
+      content: String(formData.get("content") ?? "").trim(),
     };
 
-    setMemos((current) => [newMemo, ...current]);
-    setCategory("All");
-    setSearch("");
-    setShowForm(false);
-    setSelected(null);
+    setSaving(true);
+    setNotice("");
+    setError("");
 
-    setNotice("Demo memo published. It is visible in this session only.");
+    try {
+      const response = await fetch("/api/announcements", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify(payload),
+      });
+
+      const result = (await response.json()) as AnnouncementApiResponse;
+
+      if (!response.ok || !result.success) {
+        throw new Error(result.error || "Unable to publish announcement.");
+      }
+
+      setShowForm(false);
+      setSelected(null);
+      setCategory("All");
+      setSearch("");
+      setNotice("Announcement published successfully.");
+
+      await loadAnnouncements();
+    } catch (err) {
+      setError(
+        err instanceof Error
+          ? err.message
+          : "Unable to publish announcement."
+      );
+    } finally {
+      setSaving(false);
+    }
   }
 
-  const unreadCount = memos.filter(
-    (memo) => !readIds.includes(memo.id)
-  ).length;
+  const unreadCount = announcements.length;
 
   return (
     <>
@@ -196,57 +216,54 @@ export default function MemoClient({ role }: MemoClientProps) {
         <div className="memo-title-row">
           <div>
             <p className="memo-eyebrow">ACTION FORCE HUB</p>
-
             <h1>Announcement &amp; Memo</h1>
-
             <p className="memo-muted">
               All your important updates in one place.
             </p>
           </div>
 
-          {isDirector && (
+          {permittedCategories.length > 0 && (
             <button
               className="memo-primary-button"
+              type="button"
               onClick={() => {
                 setSelected(null);
                 setShowForm((current) => !current);
                 setNotice("");
+                setError("");
               }}
             >
-              + Create Memo
+              + Create Announcement
             </button>
           )}
         </div>
 
         <section className="memo-summary">
           <article>
-            <span>Total Memos</span>
-            <strong>{memos.length}</strong>
+            <span>Total Announcements</span>
+            <strong>{announcements.length}</strong>
           </article>
-
           <article>
-            <span>Unread</span>
-            <strong>{unreadCount}</strong>
+            <span>Showing</span>
+            <strong>{filteredAnnouncements.length}</strong>
           </article>
-
           <article>
             <span>Categories</span>
             <strong>
-              {new Set(memos.map((memo) => memo.category)).size}
+              {new Set(announcements.map((item) => item.category)).size}
             </strong>
           </article>
         </section>
 
-        {isDirector && showForm && (
+        {permittedCategories.length > 0 && showForm && (
           <section className="memo-panel memo-form-panel">
             <div className="memo-detail-heading">
               <div>
-                <p className="memo-eyebrow">DIRECTOR ACCESS</p>
                 <h2>Create Announcement</h2>
               </div>
-
               <button
                 className="memo-close"
+                type="button"
                 onClick={() => setShowForm(false)}
                 aria-label="Close form"
               >
@@ -260,7 +277,7 @@ export default function MemoClient({ role }: MemoClientProps) {
 
             <form
               className="memo-form"
-              action={(formData) => publishMemo(formData)}
+              action={publishAnnouncement}
             >
               <label className="memo-full">
                 Memo Title *
@@ -274,14 +291,12 @@ export default function MemoClient({ role }: MemoClientProps) {
 
               <label>
                 Category *
-                <select name="category" defaultValue="Announcement">
-                  {categories
-                    .filter((c) => c !== "All")
-                    .map((c) => (
-                      <option key={c} value={c}>
-                        {c}
-                      </option>
-                    ))}
+                <select name="category" defaultValue={permittedCategories[0]} required>
+                  {formCategories.filter((item) => permittedCategories.includes(item)).map((item) => (
+                    <option key={item} value={item}>
+                      {item}
+                    </option>
+                  ))}
                 </select>
               </label>
 
@@ -291,7 +306,9 @@ export default function MemoClient({ role }: MemoClientProps) {
                   name="date"
                   type="date"
                   required
-                  defaultValue="2026-10-09"
+                  defaultValue={new Date().toLocaleDateString("en-CA", {
+                    timeZone: "Asia/Kuala_Lumpur",
+                  })}
                 />
               </label>
 
@@ -301,21 +318,21 @@ export default function MemoClient({ role }: MemoClientProps) {
                   name="audience"
                   defaultValue="All Action Force Members"
                 >
-                  <option>All Action Force Members</option>
-                  <option>Sales Consultants</option>
-                  <option>Agency Managers and Above</option>
-                  <option>Group Agency Managers and Above</option>
-                  <option>Branch Sales Managers and Above</option>
+                  {audiences.map((item) => (
+                    <option key={item} value={item}>
+                      {item}
+                    </option>
+                  ))}
                 </select>
               </label>
 
               <label className="memo-full">
-                Short Summary *
+                Google Link *
                 <input
-                  name="summary"
+                  name="google_link"
+                  type="url"
                   required
-                  maxLength={200}
-                  placeholder="Briefly describe the memo"
+                  placeholder="Paste the Google Drive or Docs link here"
                 />
               </label>
 
@@ -334,6 +351,7 @@ export default function MemoClient({ role }: MemoClientProps) {
                   type="button"
                   className="memo-secondary-button"
                   onClick={() => setShowForm(false)}
+                  disabled={saving}
                 >
                   Cancel
                 </button>
@@ -341,12 +359,31 @@ export default function MemoClient({ role }: MemoClientProps) {
                 <button
                   type="submit"
                   className="memo-primary-button"
+                  disabled={saving}
                 >
-                  Publish Demo Memo
+                  {saving ? "Publishing..." : "Publish Announcement"}
                 </button>
               </div>
             </form>
           </section>
+        )}
+
+        {error && (
+          <div className="memo-notice" role="alert">
+            <span>{error}</span>
+            <button type="button" onClick={() => setError("")}>
+              Dismiss
+            </button>
+          </div>
+        )}
+
+        {notice && (
+          <div className="memo-notice" role="status">
+            <span>{notice}</span>
+            <button type="button" onClick={() => setNotice("")}>
+              Dismiss
+            </button>
+          </div>
         )}
 
         <section className="memo-toolbar-panel">
@@ -362,6 +399,7 @@ export default function MemoClient({ role }: MemoClientProps) {
             {categories.map((item) => (
               <button
                 key={item}
+                type="button"
                 className={`memo-category-chip ${
                   category === item ? "active" : ""
                 }`}
@@ -373,58 +411,73 @@ export default function MemoClient({ role }: MemoClientProps) {
           </div>
 
           <div className="memo-results-count">
-            Showing {filteredMemos.length} memo(s)
+            Showing {filteredAnnouncements.length} announcement(s)
           </div>
         </section>
 
         <section className="memo-feed">
-          {filteredMemos.map((memo) => (
-            <article className="memo-card" key={memo.id}>
-              <div className="memo-card-top">
-                <div className="memo-card-tags">
-                  <span
-                    className={`memo-category-label memo-cat-${memo.category.toLowerCase()}`}
-                  >
-                    {memo.category}
+          {loading ? (
+            <div className="memo-empty">
+              <p>Loading announcements...</p>
+            </div>
+          ) : filteredAnnouncements.length > 0 ? (
+            filteredAnnouncements.map((announcement) => (
+              <article className="memo-card" key={announcement.id}>
+                <div className="memo-card-top">
+                  <div className="memo-card-tags">
+                    <span
+                      className={`memo-category-label memo-cat-${announcement.category.toLowerCase()}`}
+                    >
+                      {announcement.category}
+                    </span>
+                  </div>
+                  <span className="memo-read-state">
+                    {announcement.target_audience}
                   </span>
-
-                  {memo.pinned && (
-                    <span className="memo-pinned">★ Pinned</span>
-                  )}
                 </div>
 
-                <span
-                  className={`memo-read-state ${
-                    readIds.includes(memo.id) ? "is-read" : ""
-                  }`}
-                >
-                  {readIds.includes(memo.id) ? "✓ Read" : "Unread"}
-                </span>
-              </div>
+                <h2>{announcement.title}</h2>
+                <p className="memo-card-summary">
+                  {announcement.content.length > 180
+                    ? `${announcement.content.slice(0, 180)}…`
+                    : announcement.content}
+                </p>
 
-              <h2>{memo.title}</h2>
+                <div className="memo-card-meta">
+                  <span>
+                    Published {formatDate(announcement.publication_date)}
+                  </span>
+                  <span>{announcement.target_audience}</span>
+                </div>
 
-              <p className="memo-card-summary">{memo.summary}</p>
-
-              <div className="memo-card-meta">
-                <span>Published {formatDate(memo.date)}</span>
-                <span>{memo.audience}</span>
-              </div>
-
-              <button
-                className="memo-read-button"
-                onClick={() => openMemo(memo)}
-              >
-                Read full memo →
-              </button>
-            </article>
-          ))}
-
-          {filteredMemos.length === 0 && (
+                <div className="memo-form-actions">
+                  <button
+                    className="memo-read-button"
+                    type="button"
+                    onClick={() => setSelected(announcement)}
+                  >
+                    Read full announcement →
+                  </button>
+                  <a
+                    className="memo-read-button"
+                    href={announcement.google_link}
+                    target="_blank"
+                    rel="noopener noreferrer"
+                  >
+                    Open Google Link ↗
+                  </a>
+                </div>
+              </article>
+            ))
+          ) : (
             <div className="memo-empty">
               <span>⌕</span>
-              <h3>No memos found</h3>
-              <p>Try another search term or category.</p>
+              <h3>No announcements found</h3>
+              <p>
+                {announcements.length === 0
+                  ? "There are currently no announcements available for your account."
+                  : "Try another search term or category."}
+              </p>
             </div>
           )}
         </section>
@@ -447,9 +500,9 @@ export default function MemoClient({ role }: MemoClientProps) {
                 >
                   {selected.category}
                 </span>
-
                 <button
                   className="memo-close"
+                  type="button"
                   onClick={() => setSelected(null)}
                   aria-label="Close announcement"
                 >
@@ -458,21 +511,28 @@ export default function MemoClient({ role }: MemoClientProps) {
               </div>
 
               <h2 id="memo-detail-title">{selected.title}</h2>
-
               <p className="memo-detail-date">
-                Published {formatDate(selected.date)} · {selected.audience}
+                Published {formatDate(selected.publication_date)} ·{" "}
+                {selected.target_audience}
               </p>
 
               <div className="memo-detail-content">
                 {selected.content}
               </div>
 
-              <div className="memo-acknowledgement">
-                <span>✓ Marked as read in this demo session</span>
-              </div>
+              <p>
+                <a
+                  href={selected.google_link}
+                  target="_blank"
+                  rel="noopener noreferrer"
+                >
+                  Open Google Link ↗
+                </a>
+              </p>
 
               <button
                 className="memo-primary-button memo-done-button"
+                type="button"
                 onClick={() => setSelected(null)}
               >
                 Done
@@ -481,18 +541,11 @@ export default function MemoClient({ role }: MemoClientProps) {
           </div>
         )}
 
-        {notice && (
-          <div className="memo-notice" role="status">
-            <span>{notice}</span>
-            <button onClick={() => setNotice("")}>Dismiss</button>
-          </div>
-        )}
-
         <footer className="memo-footer">
           CORE PURPOSE • TRUST &amp; BELIEVE • FOCUS
           <br />
           GRATITUDE • POSITIVITY
-          <p>Action Force Hub · Memo Prototype</p>
+          <p>Action Force Hub · Announcements</p>
         </footer>
       </div>
 
