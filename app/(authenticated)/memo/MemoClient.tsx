@@ -18,6 +18,7 @@ type Announcement = {
   google_link: string;
   content: string;
   created_at: string;
+  created_by: string | null;
 };
 
 type MemoClientProps = {
@@ -34,6 +35,7 @@ type AnnouncementApiResponse = {
   success?: boolean;
   error?: string;
   announcements?: Announcement[];
+  current_staff_id?: string;
 };
 
 const categories: Category[] = [
@@ -66,17 +68,34 @@ function formatDate(date: string) {
   });
 }
 
+function getMalaysiaToday() {
+  const parts = new Intl.DateTimeFormat("en", {
+    timeZone: "Asia/Kuala_Lumpur",
+    year: "numeric",
+    month: "2-digit",
+    day: "2-digit",
+  }).formatToParts(new Date());
+
+  const year = parts.find((part) => part.type === "year")?.value;
+  const month = parts.find((part) => part.type === "month")?.value;
+  const day = parts.find((part) => part.type === "day")?.value;
+
+  return `${year}-${month}-${day}`;
+}
+
 export default function MemoClient(_props: MemoClientProps) {
 
   // React state below is only for temporary interface state.
   // Announcement records are always loaded from and saved to Supabase via the API.
   const [announcements, setAnnouncements] = useState<Announcement[]>([]);
+  const [currentStaffId, setCurrentStaffId] = useState("");
   const [loading, setLoading] = useState(true);
   const [saving, setSaving] = useState(false);
   const [search, setSearch] = useState("");
   const [category, setCategory] = useState<Category>("All");
   const [selected, setSelected] = useState<Announcement | null>(null);
   const [showForm, setShowForm] = useState(false);
+  const [editing, setEditing] = useState<Announcement | null>(null);
   const [notice, setNotice] = useState("");
   const [error, setError] = useState("");
   const [permittedCategories, setPermittedCategories] = useState<string[]>([]);
@@ -113,6 +132,7 @@ export default function MemoClient(_props: MemoClientProps) {
       }
 
       setAnnouncements(result.announcements ?? []);
+      setCurrentStaffId(result.current_staff_id ?? "");
     } catch (err) {
       setError(
         err instanceof Error
@@ -203,6 +223,72 @@ export default function MemoClient(_props: MemoClientProps) {
           ? err.message
           : "Unable to publish announcement."
       );
+    } finally {
+      setSaving(false);
+    }
+  }
+
+  async function updateAnnouncement(formData: FormData) {
+    if (!editing) return;
+
+    const payload = {
+      title: String(formData.get("title") ?? "").trim(),
+      category: String(formData.get("category") ?? ""),
+      publication_date: String(formData.get("date") ?? ""),
+      target_audience: String(formData.get("audience") ?? ""),
+      google_link: String(formData.get("google_link") ?? "").trim(),
+      content: String(formData.get("content") ?? "").trim(),
+    };
+
+    setSaving(true);
+    setError("");
+    setNotice("");
+
+    try {
+      const response = await fetch(`/api/announcements/${editing.id}`, {
+        method: "PATCH",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify(payload),
+      });
+      const result = (await response.json()) as { success?: boolean; error?: string };
+      if (!response.ok || !result.success) {
+        throw new Error(result.error || "Unable to update announcement.");
+      }
+
+      setEditing(null);
+      setNotice("Announcement updated successfully.");
+      await loadAnnouncements();
+    } catch (err) {
+      setError(err instanceof Error ? err.message : "Unable to update announcement.");
+    } finally {
+      setSaving(false);
+    }
+  }
+
+  async function deleteAnnouncement(announcement: Announcement) {
+    const confirmed = window.confirm(
+      `Delete "${announcement.title}"? This action cannot be undone.`
+    );
+    if (!confirmed) return;
+
+    setSaving(true);
+    setError("");
+    setNotice("");
+
+    try {
+      const response = await fetch(`/api/announcements/${announcement.id}`, {
+        method: "DELETE",
+      });
+      const result = (await response.json()) as { success?: boolean; error?: string };
+      if (!response.ok || !result.success) {
+        throw new Error(result.error || "Unable to delete announcement.");
+      }
+
+      if (selected?.id === announcement.id) setSelected(null);
+      setNotice("Announcement deleted successfully.");
+      await loadAnnouncements();
+    } catch (err) {
+      setError(err instanceof Error ? err.message : "Unable to delete announcement.");
     } finally {
       setSaving(false);
     }
@@ -306,9 +392,7 @@ export default function MemoClient(_props: MemoClientProps) {
                   name="date"
                   type="date"
                   required
-                  defaultValue={new Date().toLocaleDateString("en-CA", {
-                    timeZone: "Asia/Kuala_Lumpur",
-                  })}
+                  defaultValue={getMalaysiaToday()}
                 />
               </label>
 
@@ -467,6 +551,27 @@ export default function MemoClient(_props: MemoClientProps) {
                     Open Google Link ↗
                   </a>
                 </div>
+
+                {announcement.created_by === currentStaffId && currentStaffId !== "" && (
+                  <div className="memo-form-actions" style={{ justifyContent: "flex-end", marginTop: 12 }}>
+                    <button
+                      className="memo-read-button"
+                      type="button"
+                      onClick={() => setEditing(announcement)}
+                    >
+                      Edit
+                    </button>
+                    <button
+                      className="memo-read-button"
+                      type="button"
+                      disabled={saving}
+                      onClick={() => void deleteAnnouncement(announcement)}
+                      style={{ color: "#b42318" }}
+                    >
+                      Delete
+                    </button>
+                  </div>
+                )}
               </article>
             ))
           ) : (
@@ -481,6 +586,64 @@ export default function MemoClient(_props: MemoClientProps) {
             </div>
           )}
         </section>
+
+        {editing && (
+          <div className="memo-modal-backdrop" onClick={() => setEditing(null)}>
+            <section
+              className="memo-detail-modal"
+              role="dialog"
+              aria-modal="true"
+              aria-labelledby="memo-edit-title"
+              onClick={(event) => event.stopPropagation()}
+            >
+              <div className="memo-detail-heading">
+                <h2 id="memo-edit-title">Edit Announcement</h2>
+                <button className="memo-close" type="button" onClick={() => setEditing(null)} aria-label="Close edit form">×</button>
+              </div>
+
+              <form action={updateAnnouncement} className="memo-form">
+                <label>
+                  Memo Title
+                  <input name="title" defaultValue={editing.title} maxLength={120} required />
+                </label>
+                <label>
+                  Category
+                  <select name="category" defaultValue={editing.category} required>
+                    {formCategories.filter((item) => permittedCategories.includes(item)).map((item) => (
+                      <option key={item} value={item}>{item}</option>
+                    ))}
+                  </select>
+                </label>
+                <label>
+                  Publication Date
+                  <input name="date" type="date" defaultValue={editing.publication_date} required />
+                </label>
+                <label>
+                  Target Audience
+                  <select name="audience" defaultValue={editing.target_audience} required>
+                    {audiences.map((item) => <option key={item} value={item}>{item}</option>)}
+                  </select>
+                </label>
+                <label>
+                  Google Link
+                  <input name="google_link" type="url" defaultValue={editing.google_link} required />
+                </label>
+                <label>
+                  Full Announcement
+                  <textarea name="content" defaultValue={editing.content} rows={6} required />
+                </label>
+                <div className="memo-form-actions">
+                  <button className="memo-primary-button" type="submit" disabled={saving}>
+                    {saving ? "Saving..." : "Save Changes"}
+                  </button>
+                  <button className="memo-read-button" type="button" onClick={() => setEditing(null)}>
+                    Cancel
+                  </button>
+                </div>
+              </form>
+            </section>
+          </div>
+        )}
 
         {selected && (
           <div

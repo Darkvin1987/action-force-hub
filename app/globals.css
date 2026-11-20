@@ -1964,7 +1964,7 @@ button {
   position: fixed;
   right: 20px;
   bottom: 20px;
-  z-index: 40;
+  z-index: 2001;
   display: flex;
   align-items: center;
   gap: 14px;

@@ -86,7 +86,7 @@ export async function GET() {
     );
 
     return NextResponse.json(
-      { success: true, announcements },
+      { success: true, announcements, current_staff_id: staff.id },
       {
         headers: {
           "Cache-Control": "no-store, no-cache, must-revalidate",
@@ -220,6 +220,7 @@ export async function POST(request: Request) {
         target_audience: targetAudience,
         google_link: googleLink,
         content,
+        created_by: staff.id,
       })
       .select(
         "id, title, category, publication_date, target_audience, google_link, content, created_by, created_at, updated_at"
